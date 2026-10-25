@@ -3,12 +3,12 @@ import {
   ShieldAlert,
   LayoutGrid,
   Camera,
-  Sparkles,
   Settings,
   RefreshCw,
   Download,
   Database,
-  ExternalLink
+  ExternalLink,
+  History
 } from 'lucide-react';
 import { CanadaLogo } from './CanadaLogo';
 import type { DatasetSyncState } from '../types/recall';
@@ -113,19 +113,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="text-[10px] text-slate-400">4 Depts</span>
           </button>
 
-          {/* AI Vision Inspector Trigger */}
+          {/* Scan History */}
           <button
             type="button"
-            onClick={onOpenScanner}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all"
+            onClick={() => onTabChange('history')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${
+              currentTab === 'history'
+                ? 'bg-red-50 text-red-600 font-extrabold'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
           >
             <div className="flex items-center gap-3">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>Gemini Vision AI</span>
+              <History
+                className={`w-4 h-4 ${currentTab === 'history' ? 'text-red-600' : 'text-slate-400'}`}
+              />
+              <span>Scan History</span>
             </div>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
-              Enabled
-            </span>
+            <span className="text-[10px] text-slate-400">Logs</span>
           </button>
 
           {/* Settings */}

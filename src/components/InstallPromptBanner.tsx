@@ -19,7 +19,7 @@ export const InstallPromptBanner: React.FC<InstallPromptBannerProps> = ({ onInst
             <span className="bg-white/20 text-[10px] font-bold px-1.5 py-0.5 rounded">PWA</span>
           </h4>
           <p className="text-[11px] text-red-100">
-            Search 34,000+ safety alerts offline & scan barcodes anywhere from your home screen.
+            Search 34,000+ safety alerts offline & check product photos anywhere from your home screen.
           </p>
         </div>
       </div>

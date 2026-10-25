@@ -54,3 +54,16 @@ export interface DatasetSyncState {
   source: 'live' | 'proxy' | 'indexeddb' | 'bundled';
   errorMessage?: string;
 }
+
+export interface ScanHistoryItem {
+  id: string;
+  timestamp: number;
+  imagePreview?: string;
+  identifiedTitle: string;
+  verdict: 'MATCH_FOUND' | 'NO_RECALL_FOUND' | 'POSSIBLE_MATCH';
+  matchReason?: string;
+  matchedRecallsCount: number;
+  extractedInfo?: GeminiExtractionResult;
+  matchedRecalls?: RecallItem[];
+  searchKeywords?: string;
+}

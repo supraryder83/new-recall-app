@@ -30,13 +30,13 @@ export const RecallDetailModal: React.FC<RecallDetailModalProps> = ({ recall, is
     if (navigator.share) {
       try {
         await navigator.share(shareData);
-      } catch (err) {}
+      } catch {}
     } else {
       try {
         await navigator.clipboard.writeText(`${shareData.text} - ${shareData.url}`);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-      } catch (e) {}
+      } catch {}
     }
   };
 

@@ -269,7 +269,7 @@ export async function optimizeImage(
     let objectUrl = '';
     try {
       objectUrl = URL.createObjectURL(fileOrBlob);
-    } catch (e) {
+    } catch {
       return reject(new Error('Failed to create memory pointer for image.'));
     }
 

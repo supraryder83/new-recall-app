@@ -1,7 +1,7 @@
 import React from 'react';
-import { ShieldAlert, Camera, LayoutGrid, Settings, Sparkles } from 'lucide-react';
+import { ShieldAlert, Camera, LayoutGrid, Settings, History } from 'lucide-react';
 
-export type MobileTab = 'feed' | 'categories' | 'settings';
+export type MobileTab = 'feed' | 'categories' | 'history' | 'settings';
 
 interface BottomNavBarProps {
   currentTab: MobileTab;
@@ -49,31 +49,35 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           <span className="text-[10px] mt-1 tracking-tight">Categories</span>
         </button>
 
-        {/* CENTER PROMINENT SCAN BUTTON (Camera & Barcode) */}
+        {/* CENTER PROMINENT SCAN BUTTON (Camera AI Recall Check) */}
         <div className="relative -top-5 flex flex-col items-center">
           <button
             type="button"
             onClick={onOpenScanner}
             className="w-14 h-14 rounded-full bg-gradient-to-tr from-red-600 via-red-600 to-red-500 text-white shadow-lg shadow-red-600/40 hover:shadow-red-600/60 active:scale-95 transition-all flex items-center justify-center border-4 border-white ring-2 ring-red-500/20"
-            aria-label="Scan Product Barcode or Photo with Gemini"
+            aria-label="Take Photo to Check Recalls with Gemini"
           >
             <Camera className="w-6 h-6 animate-pulse-subtle" />
           </button>
           <span className="text-[10px] font-extrabold text-red-600 mt-0.5 tracking-tight">
-            Scan
+            Camera
           </span>
         </div>
 
-        {/* Tab 3: AI Scanner / Tools */}
+        {/* Tab 3: Scan History */}
         <button
           type="button"
-          onClick={onOpenScanner}
-          className="flex flex-col items-center justify-center w-16 py-1 text-slate-500 hover:text-slate-800 font-medium transition-all"
+          onClick={() => onTabChange('history')}
+          className={`flex flex-col items-center justify-center w-16 py-1 transition-all ${
+            currentTab === 'history'
+              ? 'text-red-600 font-bold scale-105'
+              : 'text-slate-500 hover:text-slate-800 font-medium'
+          }`}
         >
           <div className="relative">
-            <Sparkles className="w-5 h-5 text-amber-500" />
+            <History className="w-5 h-5" />
           </div>
-          <span className="text-[10px] mt-1 tracking-tight">AI Vision</span>
+          <span className="text-[10px] mt-1 tracking-tight">History</span>
         </button>
 
         {/* Tab 4: Settings */}

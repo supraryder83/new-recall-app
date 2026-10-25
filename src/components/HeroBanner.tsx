@@ -36,8 +36,8 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
         {/* Subtitle */}
         <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal">
-          Instant safety alerts directly from Health Canada, CFIA, and Transport Canada. Scan barcodes,
-          or snap product labels with <strong>Gemini 2.5 Flash AI</strong> to cross-reference hazards immediately.
+          Instant safety alerts directly from Health Canada, CFIA, and Transport Canada. Snap a photo
+          of any product packaging with <strong>Gemini 2.5 Flash AI</strong> to identify it and cross-reference safety hazards immediately.
         </p>
 
         {/* CTA Buttons */}
@@ -48,7 +48,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             className="px-5 py-3 bg-red-600 hover:bg-red-700 text-white font-extrabold text-sm rounded-2xl shadow-lg shadow-red-600/30 flex items-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             <Camera className="w-4 h-4" />
-            <span>Scan Barcode or Photo</span>
+            <span>Take Photo to Check Recalls</span>
             <ArrowRight className="w-4 h-4 ml-0.5" />
           </button>
 

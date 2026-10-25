@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Calendar, ChevronRight } from 'lucide-react';
+import { AlertTriangle, ChevronRight } from 'lucide-react';
 import type { RecallItem } from '../types/recall';
 
 interface RecallCardProps {

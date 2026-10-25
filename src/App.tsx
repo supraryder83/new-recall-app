@@ -19,6 +19,7 @@ import { InstallPromptBanner } from './components/InstallPromptBanner';
 import { BottomNavBar, type MobileTab } from './components/BottomNavBar';
 import { CategoriesView } from './components/CategoriesView';
 import { SettingsView } from './components/SettingsView';
+import { HistoryView } from './components/HistoryView';
 
 const ITEMS_PER_PAGE = 30;
 
@@ -167,7 +168,7 @@ export const App: React.FC = () => {
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2"
             >
               <Camera className="w-3.5 h-3.5" />
-              <span>Barcode & Vision Scanner</span>
+              <span>AI Recall Scanner</span>
             </button>
 
             {/* Gemini Vision badge */}
@@ -322,7 +323,19 @@ export const App: React.FC = () => {
             />
           )}
 
-          {/* TAB 3: SETTINGS */}
+          {/* TAB 3: SCAN HISTORY */}
+          {currentTab === 'history' && (
+            <HistoryView
+              onOpenScanner={() => setIsScannerOpen(true)}
+              onApplySearchQuery={(query) => {
+                setSearchQuery(query);
+                setCurrentTab('feed');
+              }}
+              onSelectRecall={(recall) => setSelectedRecall(recall)}
+            />
+          )}
+
+          {/* TAB 4: SETTINGS */}
           {currentTab === 'settings' && (
             <SettingsView
               syncState={syncState}
