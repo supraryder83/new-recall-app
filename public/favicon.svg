@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Rounded Shield Background -->
+  <rect width="100" height="100" rx="24" fill="#dc2626"/>
+  <rect x="3" y="3" width="94" height="94" rx="21" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
+  
+  <!-- Stylized Canadian Maple Leaf -->
+  <path d="M50 14
+           L55 30
+           L68 24
+           L66 38
+           L82 42
+           L72 55
+           L78 65
+           L60 64
+           L53 76
+           L52 86
+           L48 86
+           L47 76
+           L40 64
+           L22 65
+           L28 55
+           L18 42
+           L34 38
+           L32 24
+           L45 30
+           Z" fill="#ffffff" />
+           
+  <!-- Alert Shield Badge in bottom-right -->
+  <circle cx="76" cy="76" r="16" fill="#111827" stroke="#ffffff" stroke-width="2.5"/>
+  <rect x="74" y="66" width="4" height="11" rx="2" fill="#facc15"/>
+  <circle cx="76" cy="83" r="2" fill="#facc15"/>
+</svg>
