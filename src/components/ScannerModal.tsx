@@ -7,13 +7,15 @@ import {
   ShieldCheck,
   RefreshCw,
   AlertTriangle,
-  ChevronRight,
   SwitchCamera,
   Flashlight,
   Key,
   Upload,
   Search,
-  Tag
+  Tag,
+  ExternalLink,
+  Calendar,
+  FileText
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { RecallItem, ScanMatchResult } from '../types/recall';
@@ -828,7 +830,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
 
               {/* Extracted Details breakdown */}
               {scanResult.extractedInfo && (
-                <div className="mt-4 pt-3.5 border-t border-slate-200/60 grid grid-cols-2 gap-2 text-xs">
+                <div className="mt-4 pt-3.5 border-t border-slate-200/60 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                   {scanResult.extractedInfo.brand && (
                     <div className="bg-white/80 p-2.5 rounded-xl border border-slate-100">
                       <span className="text-slate-500 block text-[10px] font-semibold uppercase">Brand</span>
@@ -837,16 +839,34 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
                   )}
                   {scanResult.extractedInfo.productName && (
                     <div className="bg-white/80 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-slate-500 block text-[10px] font-semibold uppercase">Product</span>
+                      <span className="text-slate-500 block text-[10px] font-semibold uppercase">Product Line</span>
                       <span className="font-bold text-slate-800">{scanResult.extractedInfo.productName}</span>
+                    </div>
+                  )}
+                  {scanResult.extractedInfo.flavorOrVariant && (
+                    <div className="bg-white/80 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-slate-500 block text-[10px] font-semibold uppercase">Flavor / Variant</span>
+                      <span className="font-bold text-slate-800">{scanResult.extractedInfo.flavorOrVariant}</span>
+                    </div>
+                  )}
+                  {scanResult.extractedInfo.packageSize && (
+                    <div className="bg-white/80 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-slate-500 block text-[10px] font-semibold uppercase">Size / Format</span>
+                      <span className="font-bold text-slate-800">{scanResult.extractedInfo.packageSize}</span>
                     </div>
                   )}
                   {(scanResult.extractedInfo.modelOrLot || scanResult.extractedInfo.modelOrBatchNumber) && (
                     <div className="bg-white/80 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-slate-500 block text-[10px] font-semibold uppercase">Batch / Model</span>
+                      <span className="text-slate-500 block text-[10px] font-semibold uppercase">Batch / Lot / Code</span>
                       <span className="font-mono font-bold text-slate-800">
                         {scanResult.extractedInfo.modelOrLot || scanResult.extractedInfo.modelOrBatchNumber}
                       </span>
+                    </div>
+                  )}
+                  {scanResult.extractedInfo.upcOrCode && (
+                    <div className="bg-white/80 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-slate-500 block text-[10px] font-semibold uppercase">UPC / Barcode</span>
+                      <span className="font-mono font-bold text-slate-800">{scanResult.extractedInfo.upcOrCode}</span>
                     </div>
                   )}
                   {scanResult.extractedInfo.category && (
@@ -859,49 +879,136 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
               )}
             </div>
 
-            {/* Matched Recalls list if any */}
+            {/* Matched Recalls with ALL DETAILS */}
             {scanResult.matchedRecalls.length > 0 && (
-              <div className="space-y-2 text-left">
+              <div className="space-y-3.5 text-left">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Official Safety Notices ({scanResult.matchedRecalls.length})
+                  <span className="text-xs font-bold uppercase tracking-wider text-red-600 flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4" />
+                    <span>Official Safety Notice Details ({scanResult.matchedRecalls.length})</span>
                   </span>
-                  <span className="text-[11px] text-red-600 font-semibold">Tap to view instructions</span>
+                  <span className="text-[11px] text-slate-500 font-semibold">
+                    Complete government notices
+                  </span>
                 </div>
 
-                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                  {scanResult.matchedRecalls.map((recall) => (
-                    <div
-                      key={recall.NID}
-                      onClick={() => {
-                        onSelectRecall(recall);
-                        onClose();
-                      }}
-                      className="p-3.5 bg-slate-50 hover:bg-red-50/60 border border-slate-200 hover:border-red-300 rounded-xl cursor-pointer transition-all flex items-start justify-between gap-3 group"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          {recall['Recall class'] && (
-                            <span className="bg-red-600 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded">
-                              {recall['Recall class']}
+                <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
+                  {scanResult.matchedRecalls.map((recall, index) => {
+                    const recallClass = (recall['Recall class'] || '').trim();
+                    const isClass1 = recallClass.toLowerCase().includes('class 1') || recallClass.toLowerCase().includes('type i');
+                    const isClass2 = recallClass.toLowerCase().includes('class 2') || recallClass.toLowerCase().includes('type ii');
+
+                    return (
+                      <div
+                        key={recall.NID || index}
+                        className="p-4 sm:p-5 bg-slate-50 border-2 border-red-200 hover:border-red-400 rounded-2xl shadow-sm text-left space-y-3.5 transition-all"
+                      >
+                        {/* Top Badges */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {recallClass && (
+                            <span
+                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                isClass1
+                                  ? 'bg-red-600 text-white shadow-xs'
+                                  : isClass2
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-slate-700 text-white'
+                              }`}
+                            >
+                              {recallClass}
                             </span>
                           )}
-                          <span className="text-[10px] text-slate-500 font-medium">
+                          {recall.Organization && (
+                            <span className="bg-white text-slate-700 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded">
+                              {recall.Organization}
+                            </span>
+                          )}
+                          {recall.Category && (
+                            <span className="bg-white text-slate-600 border border-slate-200 text-[10px] font-medium px-2 py-0.5 rounded">
+                              {recall.Category}
+                            </span>
+                          )}
+                          {recall.NID && (
+                            <span className="bg-white text-slate-500 border border-slate-200 font-mono text-[10px] px-2 py-0.5 rounded">
+                              ID: #{recall.NID}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1 ml-auto">
+                            <Calendar className="w-3 h-3 text-slate-400" />
                             {recall['Last updated']}
                           </span>
                         </div>
-                        <h5 className="font-bold text-xs sm:text-sm text-slate-900 group-hover:text-red-600 transition-colors line-clamp-2">
+
+                        {/* Full Official Title (No truncation) */}
+                        <h4 className="font-extrabold text-sm sm:text-base text-slate-900 leading-snug">
                           {recall.Title}
-                        </h5>
-                        {recall.Issue && (
-                          <p className="text-[11px] text-slate-600 mt-1 line-clamp-1">
-                            <strong>Issue:</strong> {recall.Issue}
+                        </h4>
+
+                        {/* Affected Product & Specific Codes Box */}
+                        <div className="p-3 bg-white border border-slate-200/90 rounded-xl space-y-1">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                            <Tag className="w-3 h-3 text-slate-400" />
+                            <span>Affected Product Description & Codes</span>
+                          </span>
+                          <p className="text-xs sm:text-sm font-semibold text-slate-900 leading-relaxed whitespace-pre-line">
+                            {recall.Product || recall.Title}
                           </p>
+                        </div>
+
+                        {/* Safety Hazard / Defect Box */}
+                        {recall.Issue && (
+                          <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-red-700 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-red-600" />
+                              <span>Safety Hazard & Defect Details</span>
+                            </span>
+                            <p className="text-xs sm:text-sm font-semibold text-red-950 leading-relaxed whitespace-pre-line">
+                              {recall.Issue}
+                            </p>
+                          </div>
                         )}
+
+                        {/* What You Should Do Box */}
+                        {recall['What you should do'] && (
+                          <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                              <span>What You Should Do (Official Consumer Action)</span>
+                            </span>
+                            <p className="text-xs sm:text-sm text-slate-800 leading-relaxed whitespace-pre-line">
+                              {recall['What you should do']}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Actions Row */}
+                        <div className="pt-1 flex flex-wrap items-center gap-2">
+                          {recall.URL && (
+                            <a
+                              href={recall.URL}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95"
+                            >
+                              <span>Canada.ca Official Notice</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectRecall(recall);
+                              onClose();
+                            }}
+                            className="py-2 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Full Details & Share</span>
+                          </button>
+                        </div>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-red-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

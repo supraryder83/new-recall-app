@@ -76,13 +76,26 @@ export const RecallDetailModal: React.FC<RecallDetailModalProps> = ({ recall, is
                 </span>
               )}
               {recall.Organization && (
-                <span className="bg-slate-100 text-slate-700 text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded">
+                <span className="bg-slate-100 text-slate-700 text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded border border-slate-200/60">
                   {recall.Organization}
+                </span>
+              )}
+              {recall.Category && (
+                <span className="bg-slate-100 text-slate-600 text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded">
+                  {recall.Category}
+                </span>
+              )}
+              {recall.NID && (
+                <span className="bg-slate-100 text-slate-500 font-mono text-[10px] sm:text-xs px-2 py-0.5 rounded">
+                  ID: #{recall.NID}
                 </span>
               )}
               <span className="text-[10px] sm:text-xs text-slate-400 font-medium flex items-center gap-1">
                 <Calendar className="w-3 h-3 text-slate-400" />
                 {recall['Last updated']}
+              </span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${recall.Archived === '1' ? 'bg-slate-200 text-slate-600' : 'bg-red-100 text-red-700'}`}>
+                {recall.Archived === '1' ? 'Archived' : 'Active Notice'}
               </span>
             </div>
             <h3 className="font-extrabold text-sm sm:text-lg text-slate-900 leading-snug pt-0.5">

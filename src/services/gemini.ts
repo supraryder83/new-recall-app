@@ -105,22 +105,26 @@ export async function analyzeProductImageWithGemini({
 
   const promptText = `
 You are an expert product safety investigator for the Canadian Recall & Safety Alerts database (Health Canada, CFIA, Transport Canada).
-Inspect this product packaging image, label, logo, or barcode carefully.
+Examine this product packaging image, label, logo, or barcode with extreme forensic precision.
+
+Your goal is to identify the EXACT commercial product shown in the picture so it can be accurately cross-referenced against the Canadian recall database without false positive matches.
 
 Extract and return a JSON object with EXACTLY this structure:
 {
-  "productName": "Common commercial product name (e.g. Jack'd Up Bites, Peanut Butter, Heated Blanket, Brake Pad)",
-  "brand": "Manufacturer or brand name (e.g. Plantropy, Kirkland, Nestle, Ford, Dyson, or empty if unknown)",
+  "brand": "Exact manufacturer or brand name visible (e.g. 'Plantropy', 'Great Value', 'Nestlé', 'Kirkland Signature', 'Campbell\\'s', 'Ford', or empty if unknown)",
+  "productName": "Exact commercial product name including specific line, flavor, or edition (e.g. 'Jack\\'d Up Bites Jalapeño & Cheddar', 'Cream of Mushroom Condensed Soup', 'Cheerios Honey Nut', 'Tylenol Extra Strength 500mg', 'F-150 SuperCrew')",
+  "flavorOrVariant": "Specific flavor, scent, sub-type, or variety (e.g. 'Jalapeño & Cheddar', 'Vanilla', 'Unsweetened', '2% Milk', 'Extra Strength', or empty if none)",
+  "packageSize": "Package net weight, volume, or count if visible (e.g. '150 g', '355 mL', '6 pack', or empty)",
   "category": "One of: Food, Consumer Products, Health/Medical, Vehicles, Other",
-  "modelOrLot": "Model number, lot code, batch number, or VIN (or empty if none)",
-  "searchKeywords": "2 to 4 distinctive keywords for recall database search (e.g. 'Plantropy Jack'd Up Bites' or 'JKMAX heated blanket')",
-  "upcOrCode": "UPC or barcode numbers if visible in image, or empty",
-  "confidenceNotes": "Brief 1-sentence note of visual findings"
+  "modelOrLot": "Exact model number, lot code, batch number, expiry date, or VIN if visible (or empty if none)",
+  "upcOrCode": "UPC or barcode numbers if visible or readable in the image, or empty",
+  "searchKeywords": "2 to 4 distinctive compound keywords for exact recall lookup (e.g. 'Plantropy Jack\\'d Up Bites Jalapeno' or 'JKMAX heated blanket')",
+  "confidenceNotes": "Brief 1-sentence note of what was observed on the packaging"
 }
 
 Important:
 - Return ONLY valid JSON. Do not wrap in markdown fences or backticks.
-- Be accurate and extract exact text visible on packaging or labels.
+- Be precise: identify the EXACT product, brand, and flavor/variant shown. Do not use generic one-word descriptions like 'snack' or 'car' or 'shampoo'.
 `;
 
   const ai = new GoogleGenAI({ apiKey });
@@ -163,15 +167,18 @@ Important:
       productName: parsed.productName || 'Unknown Product',
       brand: parsed.brand || '',
       category: parsed.category || parsed.detectedCategory || 'Other',
+      flavorOrVariant: parsed.flavorOrVariant || '',
+      packageSize: parsed.packageSize || '',
       modelOrLot: parsed.modelOrLot || parsed.modelOrBatchNumber || '',
       modelOrBatchNumber: parsed.modelOrLot || parsed.modelOrBatchNumber || '',
       detectedCategory: parsed.category || parsed.detectedCategory || 'Other',
       searchKeywords: parsed.searchKeywords || [parsed.brand, parsed.productName].filter(Boolean).join(' '),
       upcOrCode: parsed.upcOrCode || '',
-      confidenceNotes: parsed.confidenceNotes || ''
+      confidenceNotes: parsed.confidenceNotes || '',
+      isSpecificProduct: Boolean(parsed.brand || parsed.productName)
     };
 
-    // Cross-reference extracted details against the Canadian recall dataset
+    // Cross-reference extracted details against the Canadian recall dataset with forensic scoring
     return crossReferenceRecallDataset(extraction, recallsDataset);
   } catch (err: any) {
     console.error('Gemini vision analysis error:', err);
@@ -223,7 +230,7 @@ export async function resolveBarcodeWithGemini(
       },
       matchedRecalls: directMatches,
       matchReason: directMatches.length > 0
-        ? `Product barcode ${cleanBarcode} matched ${directMatches.length} active Canadian safety notice(s).`
+        ? `Barcode ${cleanBarcode} matched ${directMatches.length} active Canadian safety notice(s).`
         : `Barcode ${cleanBarcode} checked against ${recallsDataset.length.toLocaleString()} Canadian safety recalls. No active notices found.`
     };
   }
@@ -237,6 +244,8 @@ Return ONLY a valid JSON object with:
 {
   "brand": "Manufacturer or brand name (e.g. Campbell's, Kirkland, Kraft, or empty if unknown)",
   "productName": "Commercial product name and variant (e.g. Cream of Mushroom Soup 284ml)",
+  "flavorOrVariant": "Flavor or variant if applicable",
+  "packageSize": "Package net weight or size if known",
   "category": "One of: Food, Consumer Products, Health/Medical, Vehicles, Other",
   "searchKeywords": "Distinctive keywords to search recall notices (e.g. brand + product name)"
 }`;
@@ -257,6 +266,8 @@ Return ONLY a valid JSON object with:
     const extraction: GeminiExtractionResult = {
       brand: brand || '',
       productName: productName || `Barcode #${cleanBarcode}`,
+      flavorOrVariant: parsed.flavorOrVariant || '',
+      packageSize: parsed.packageSize || '',
       category: parsed.category || 'Other',
       modelOrLot: cleanBarcode,
       upcOrCode: cleanBarcode,
@@ -311,21 +322,55 @@ Return ONLY a valid JSON object with:
   }
 }
 
+// Noise words in recall titles and packaging descriptions (English & French)
+const GENERIC_STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'of', 'in', 'for', 'with', 'by', 'to', 'at', 'from',
+  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'ou', 'pour', 'avec', 'par',
+  'recalled', 'recall', 'recalls', 'rappel', 'rappels', 'alert', 'alerte', 'safety',
+  'product', 'products', 'produit', 'produits', 'item', 'items', 'brand', 'marque',
+  'certain', 'certains', 'various', 'divers', 'all', 'tous', 'pack', 'pkg', 'size', 'format',
+  'net', 'wt', 'weight', 'poids', 'gram', 'grams', 'ml', 'oz', 'kg', 'lb',
+  'due', 'because', 'canada', 'canadian', 'canadien', 'canadienne', 'notice', 'avis',
+  'number', 'code', 'lot', 'date', 'best', 'before', 'upc', 'inc', 'ltd', 'corp', 'co'
+]);
+
+function normalizeClean(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove diacritics
+    .replace(/['"’`]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractDistinctiveTokens(text: string): string[] {
+  const norm = normalizeClean(text);
+  return norm
+    .split(' ')
+    .filter((w) => w.length >= 3 && !GENERIC_STOPWORDS.has(w));
+}
+
 /**
- * Cross-references extracted product details against the Canadian recall database
+ * Cross-references extracted product details against the Canadian recall database.
+ * Employs forensic matching to guarantee we match the EXACT product in the picture,
+ * preventing loose brand false-positives.
  */
 export function crossReferenceRecallDataset(
   extracted: GeminiExtractionResult,
   dataset: RecallItem[]
 ): ScanMatchResult {
-  const brand = (extracted.brand || '').trim().toLowerCase();
-  const product = (extracted.productName || '').trim().toLowerCase();
-  const model = (extracted.modelOrLot || extracted.modelOrBatchNumber || '').trim().toLowerCase();
-  const upc = (extracted.upcOrCode || '').replace(/[^0-9]/g, '');
+  const cleanBrand = normalizeClean(extracted.brand);
+  const cleanProduct = normalizeClean(extracted.productName);
+  const cleanFlavor = normalizeClean(extracted.flavorOrVariant || '');
+  const cleanModel = normalizeClean(extracted.modelOrLot || extracted.modelOrBatchNumber || '');
+  const cleanUpc = (extracted.upcOrCode || '').replace(/[^0-9]/g, '');
+  const cleanCategory = normalizeClean(extracted.category || extracted.detectedCategory || '');
 
   const identifiedTitle = [extracted.brand, extracted.productName].filter(Boolean).join(' ') || 'Product';
   const searchKeywords =
-    extracted.searchKeywords || [extracted.brand, extracted.productName].filter(Boolean).join(' ');
+    extracted.searchKeywords || [extracted.brand, extracted.productName, extracted.flavorOrVariant].filter(Boolean).join(' ');
 
   if (!dataset || dataset.length === 0) {
     return {
@@ -340,69 +385,159 @@ export function crossReferenceRecallDataset(
     };
   }
 
-  const directMatches: RecallItem[] = [];
-  const partialMatches: RecallItem[] = [];
+  const prodTokens = extractDistinctiveTokens(extracted.productName);
+  const flavorTokens = extractDistinctiveTokens(extracted.flavorOrVariant || '');
 
-  // Filter out very short generic words
-  const productTokens = product
-    .split(/\s+/)
-    .map((w) => w.replace(/[^a-z0-9]/gi, '').trim())
-    .filter((w) => w.length > 2);
+  // Score candidate items
+  interface ScoredRecall {
+    item: RecallItem;
+    score: number;
+    matchType: 'upc' | 'model' | 'exact_product' | 'product_line';
+  }
+
+  const scoredCandidates: ScoredRecall[] = [];
 
   for (const item of dataset) {
-    const title = (item.Title || '').toLowerCase();
-    const prodDesc = (item.Product || '').toLowerCase();
-    const issue = (item.Issue || '').toLowerCase();
-    const whatToDo = (item['What you should do'] || '').toLowerCase();
-    const fullText = `${title} ${prodDesc} ${issue} ${whatToDo}`;
+    const itemTitle = normalizeClean(item.Title);
+    const itemProduct = normalizeClean(item.Product);
+    const itemIssue = normalizeClean(item.Issue);
+    const itemOrg = normalizeClean(item.Organization);
+    const itemCat = normalizeClean(item.Category);
+    const fullItemText = `${itemTitle} ${itemProduct} ${itemIssue} ${itemOrg} ${itemCat}`;
 
-    // 1. UPC exact match
-    if (upc.length >= 8 && fullText.includes(upc)) {
-      directMatches.push(item);
+    // 1. UPC exact match (100% confidence)
+    const digitsOnlyText = fullItemText.replace(/[^0-9]/g, '');
+    if (cleanUpc.length >= 8 && (digitsOnlyText.includes(cleanUpc) || fullItemText.includes(cleanUpc))) {
+      scoredCandidates.push({ item, score: 100, matchType: 'upc' });
       continue;
     }
 
-    // 2. Model / batch exact match
-    if (model.length >= 4 && fullText.includes(model)) {
-      directMatches.push(item);
-      continue;
-    }
-
-    // 3. Brand match + product keyword match
-    if (brand.length >= 3 && (title.includes(brand) || prodDesc.includes(brand))) {
-      const matchingTokens = productTokens.filter((token) => fullText.includes(token));
-      if (productTokens.length > 0 && matchingTokens.length >= Math.min(2, productTokens.length)) {
-        directMatches.push(item);
+    // 2. Model / batch exact match (95% confidence)
+    if (cleanModel.length >= 4 && !GENERIC_STOPWORDS.has(cleanModel)) {
+      if (itemProduct.includes(cleanModel) || itemTitle.includes(cleanModel)) {
+        scoredCandidates.push({ item, score: 95, matchType: 'model' });
         continue;
       }
-      partialMatches.push(item);
+    }
+
+    // 3. Category incompatibility gate
+    // If user photographed a Vehicle, do not match Food recalls, and vice-versa
+    if (cleanCategory.includes('vehicle') || cleanCategory.includes('transport') || cleanCategory.includes('car')) {
+      if (itemCat.includes('food') || itemOrg.includes('cfia') || itemCat.includes('confectionery')) {
+        continue;
+      }
+    } else if (cleanCategory.includes('food')) {
+      if (itemCat.includes('vehicle') || itemOrg.includes('transport') || itemCat.includes('tires')) {
+        continue;
+      }
+    }
+
+    // 4. Brand verification
+    let brandMatches = false;
+    if (cleanBrand.length >= 2) {
+      brandMatches =
+        itemTitle.includes(cleanBrand) ||
+        itemProduct.includes(cleanBrand) ||
+        itemOrg.includes(cleanBrand);
+
+      // If a brand was clearly identified in the photo, and this recall does NOT match that brand,
+      // it CANNOT be the exact product!
+      if (!brandMatches) {
+        continue;
+      }
+    }
+
+    // 5. Product Name & Line Concordance
+    let matchedProdTokensCount = 0;
+    if (prodTokens.length > 0) {
+      for (const t of prodTokens) {
+        if (itemTitle.includes(t) || itemProduct.includes(t)) {
+          matchedProdTokensCount++;
+        }
+      }
+    }
+
+    const prodTokenRatio = prodTokens.length > 0 ? matchedProdTokensCount / prodTokens.length : 0;
+    const hasPhraseMatch =
+      cleanProduct.length >= 4 && (itemTitle.includes(cleanProduct) || itemProduct.includes(cleanProduct));
+
+    // STRICT FILTER: If the product tokens have < 50% coverage and there is NO phrase match,
+    // this recall is for a DIFFERENT product from the same brand (e.g. Ford F-150 vs Ford Fiesta,
+    // or Nestlé KitKat vs Nestlé Infant Formula). Discard it!
+    if (prodTokens.length >= 2 && prodTokenRatio < 0.5 && !hasPhraseMatch) {
+      continue;
+    }
+    if (prodTokens.length === 1 && prodTokenRatio === 0 && !hasPhraseMatch) {
       continue;
     }
 
-    // 4. Strong product tokens match
-    if (!brand && productTokens.length >= 2) {
-      const matchCount = productTokens.filter((t) => title.includes(t) || prodDesc.includes(t)).length;
-      if (matchCount >= Math.min(3, productTokens.length)) {
-        partialMatches.push(item);
+    // 6. Calculate Weighted Forensic Score (0 to 100)
+    let score = 0;
+
+    // Brand contribution
+    if (brandMatches) {
+      score += 25;
+    }
+
+    // Direct phrase match bonus
+    if (hasPhraseMatch) {
+      score += 45;
+    }
+
+    // Token ratio contribution
+    score += Math.round(prodTokenRatio * 35);
+
+    // Flavor / variant concordance
+    if (cleanFlavor.length >= 3 || flavorTokens.length > 0) {
+      const hasFlavorPhrase = cleanFlavor.length >= 3 && (itemTitle.includes(cleanFlavor) || itemProduct.includes(cleanFlavor));
+      let flavorMatchCount = 0;
+      for (const ft of flavorTokens) {
+        if (itemTitle.includes(ft) || itemProduct.includes(ft)) {
+          flavorMatchCount++;
+        }
       }
+      if (hasFlavorPhrase || flavorMatchCount > 0) {
+        score += 15;
+      }
+    }
+
+    // Only include candidate if score indicates a genuine product line or exact product match
+    if (score >= 45) {
+      scoredCandidates.push({
+        item,
+        score: Math.min(100, score),
+        matchType: score >= 70 ? 'exact_product' : 'product_line'
+      });
     }
   }
 
-  const matchedRecalls = directMatches.length > 0 ? directMatches : partialMatches;
+  // Sort candidate recalls by match score descending, then by last updated date descending
+  scoredCandidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const dateA = a.item['Last updated'] || '';
+    const dateB = b.item['Last updated'] || '';
+    return dateB.localeCompare(dateA);
+  });
+
+  const exactMatches = scoredCandidates.filter((c) => c.score >= 70).map((c) => c.item);
+  const possibleMatches = scoredCandidates.filter((c) => c.score >= 45 && c.score < 70).map((c) => c.item);
+
+  const matchedRecalls = exactMatches.length > 0 ? exactMatches : possibleMatches;
   const verdict =
-    directMatches.length > 0
+    exactMatches.length > 0
       ? 'MATCH_FOUND'
-      : partialMatches.length > 0
+      : possibleMatches.length > 0
         ? 'POSSIBLE_MATCH'
         : 'NO_RECALL_FOUND';
 
   const queryUsed = searchKeywords || identifiedTitle;
+  const topScore = scoredCandidates[0]?.score || 0;
 
   let matchReason = '';
   if (verdict === 'MATCH_FOUND') {
-    matchReason = `Identified: ${identifiedTitle} — matched ${matchedRecalls.length} active Canadian safety notice(s).`;
+    matchReason = `Identified: ${identifiedTitle} — exact product match found in ${exactMatches.length} active Canadian safety notice(s).`;
   } else if (verdict === 'POSSIBLE_MATCH') {
-    matchReason = `Identified: ${identifiedTitle} — found related notices. Check model or batch numbers carefully.`;
+    matchReason = `Identified: ${identifiedTitle} — related notices found for this product line. Verify your packaging codes, lot numbers, or flavors below.`;
   } else {
     matchReason = `Identified: ${identifiedTitle}. No active safety recalls found in the Canadian open data registry (${dataset.length.toLocaleString()} notices checked).`;
   }
@@ -415,6 +550,7 @@ export function crossReferenceRecallDataset(
     searchKeywords,
     extractedInfo: extracted,
     matchedRecalls: matchedRecalls.slice(0, 15),
-    matchReason
+    matchReason,
+    matchScore: topScore
   };
 }

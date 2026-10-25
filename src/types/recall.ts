@@ -28,12 +28,15 @@ export interface GeminiExtractionResult {
   brand: string;
   productName: string;
   category: string;
+  flavorOrVariant?: string;
+  packageSize?: string;
   modelOrLot?: string;
   modelOrBatchNumber?: string;
   searchKeywords?: string;
   detectedCategory?: string;
   upcOrCode?: string;
   confidenceNotes?: string;
+  isSpecificProduct?: boolean;
 }
 
 export interface ScanMatchResult {
@@ -45,6 +48,7 @@ export interface ScanMatchResult {
   extractedInfo?: GeminiExtractionResult;
   matchedRecalls: RecallItem[];
   matchReason?: string;
+  matchScore?: number;
 }
 
 export interface DatasetSyncState {

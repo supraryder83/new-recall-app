@@ -56,8 +56,11 @@ function exportHistoryToCSV(items: ScanHistoryItem[]): void {
     'Date & Time',
     'Product Name',
     'Brand',
+    'Flavor or Variant',
+    'Package Size',
     'Category',
     'Model or Batch',
+    'UPC or Barcode',
     'Recall Verdict',
     'Matched Recalls Count',
     'Match Reason',
@@ -73,8 +76,11 @@ function exportHistoryToCSV(items: ScanHistoryItem[]): void {
   const rows = items.map((item) => {
     const dateStr = new Date(item.timestamp).toLocaleString();
     const brand = item.extractedInfo?.brand || '';
+    const flavor = item.extractedInfo?.flavorOrVariant || '';
+    const size = item.extractedInfo?.packageSize || '';
     const category = item.extractedInfo?.category || '';
     const model = item.extractedInfo?.modelOrLot || item.extractedInfo?.modelOrBatchNumber || '';
+    const upc = item.extractedInfo?.upcOrCode || '';
     const verdictLabel =
       item.verdict === 'MATCH_FOUND'
         ? 'RECALL FLAGGED'
@@ -87,8 +93,11 @@ function exportHistoryToCSV(items: ScanHistoryItem[]): void {
       escapeCSV(dateStr),
       escapeCSV(item.identifiedTitle),
       escapeCSV(brand),
+      escapeCSV(flavor),
+      escapeCSV(size),
       escapeCSV(category),
       escapeCSV(model),
+      escapeCSV(upc),
       escapeCSV(verdictLabel),
       escapeCSV(item.matchedRecallsCount || 0),
       escapeCSV(item.matchReason || ''),
@@ -367,9 +376,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       </p>
                     )}
 
+                    {/* Variant / Size info */}
+                    {(item.extractedInfo?.flavorOrVariant || item.extractedInfo?.packageSize) && (
+                      <span className="text-[11px] text-slate-600 font-medium mt-0.5 block">
+                        {[item.extractedInfo.flavorOrVariant, item.extractedInfo.packageSize].filter(Boolean).join(' • ')}
+                      </span>
+                    )}
+
                     {/* Batch / Model info */}
                     {(item.extractedInfo?.modelOrLot || item.extractedInfo?.modelOrBatchNumber) && (
-                      <span className="text-[10px] text-slate-400 font-mono mt-1 block">
+                      <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
                         Batch/Model: {item.extractedInfo.modelOrLot || item.extractedInfo.modelOrBatchNumber}
                       </span>
                     )}
@@ -402,7 +418,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
                       title="View active safety notice"
                     >
-                      <span>View Notice</span>
+                      <span>View Notice{item.matchedRecalls.length > 1 ? ` (${item.matchedRecalls.length})` : ''}</span>
                       <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   )}
