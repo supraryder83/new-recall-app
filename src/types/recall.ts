@@ -27,8 +27,11 @@ export interface CategoryDefinition {
 export interface GeminiExtractionResult {
   brand: string;
   productName: string;
-  modelOrBatchNumber: string;
-  detectedCategory: string;
+  category: string;
+  modelOrLot?: string;
+  modelOrBatchNumber?: string;
+  searchKeywords?: string;
+  detectedCategory?: string;
   upcOrCode?: string;
   confidenceNotes?: string;
 }
@@ -37,6 +40,8 @@ export interface ScanMatchResult {
   verdict: 'MATCH_FOUND' | 'NO_RECALL_FOUND' | 'POSSIBLE_MATCH';
   query: string;
   searchType: 'barcode' | 'vision';
+  identifiedTitle?: string;
+  searchKeywords?: string;
   extractedInfo?: GeminiExtractionResult;
   matchedRecalls: RecallItem[];
   matchReason?: string;

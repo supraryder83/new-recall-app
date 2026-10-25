@@ -124,10 +124,10 @@ export async function fetchRecallsData(
   forceRefresh = false,
   onProgress?: (step: string) => void
 ): Promise<FetchFeedResult> {
-  // 1. FAST PATH: Return cached IndexedDB data immediately if available
+  // 1. FAST PATH: Return cached IndexedDB data immediately if available and full dataset (> 5,000 records)
   if (!forceRefresh) {
     const cached = await recallStorage.getAllRecalls();
-    if (cached && cached.length > 0) {
+    if (cached && cached.length > 5000) {
       return {
         data: cached,
         source: 'indexeddb',

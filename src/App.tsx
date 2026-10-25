@@ -346,6 +346,10 @@ export const App: React.FC = () => {
           onClose={() => setIsScannerOpen(false)}
           recallsDataset={allRecalls}
           onSelectRecall={(recall) => setSelectedRecall(recall)}
+          onApplySearchQuery={(query) => {
+            setSearchQuery(query);
+            setCurrentTab('feed');
+          }}
         />
 
         <RecallDetailModal

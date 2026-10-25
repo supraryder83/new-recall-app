@@ -96,6 +96,12 @@ class FastRecallStorageService {
 
         req.onsuccess = () => {
           if (req.result && Array.isArray(req.result.data) && req.result.data.length > 0) {
+            // Upgrade legacy truncated 1,200 cache to the full 34,000+ Canadian recall dataset
+            if (req.result.data.length <= 1200) {
+              console.log('Legacy 1,200 cache detected in IndexedDB. Upgrading to full Canadian dataset.');
+              resolve([]);
+              return;
+            }
             this.inMemoryCache = req.result.data;
             this.inMemoryMeta = {
               lastSynced: req.result.timestamp || null,

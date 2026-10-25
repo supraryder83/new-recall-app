@@ -5,12 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  envPrefix: ['VITE_', 'GEMINI_', 'GOOGLE_'],
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/*.png', 'data/*.json'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/*.png'],
       manifest: {
         name: 'Canada Recall Alert',
         short_name: 'RecallAlert',
@@ -39,7 +40,8 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/recalls-rappels\.canada\.ca\/.*/i,
