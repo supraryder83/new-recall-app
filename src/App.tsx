@@ -34,7 +34,7 @@ export const App: React.FC = () => {
     totalRecords: 0,
     source: 'live'
   });
-  const [loadingProgress, setLoadingProgress] = useState('Connecting to Canadian recall registry...');
+  const [loadingProgress, setLoadingProgress] = useState('Loading Canadian recall database...');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,7 +72,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Load Canadian Recalls Data
+  // Instant Load & Background Sync
   const loadData = useCallback(async (forceRefresh = false) => {
     setSyncState((prev) => ({ ...prev, status: 'loading', errorMessage: undefined }));
     try {
@@ -188,6 +188,19 @@ export const App: React.FC = () => {
             />
           )}
 
+          {/* Non-blocking background sync toast */}
+          {syncState.status === 'loading' && allRecalls.length > 0 && (
+            <div className="py-2 px-3.5 bg-red-50 border border-red-200/80 rounded-2xl text-xs text-red-800 flex items-center justify-between animate-pulse">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 text-red-600 animate-spin" />
+                <span>{loadingProgress || 'Updating Canadian safety notices in background...'}</span>
+              </div>
+              <span className="text-[10px] font-bold text-red-600 uppercase bg-white px-2 py-0.5 rounded-md border border-red-200">
+                Syncing
+              </span>
+            </div>
+          )}
+
           {/* TAB 1: ALERTS FEED */}
           {currentTab === 'feed' && (
             <div className="space-y-4">
@@ -203,7 +216,7 @@ export const App: React.FC = () => {
                 totalDataset={allRecalls.length}
               />
 
-              {/* Feed Status / Error / Loading States */}
+              {/* Feed Initial Loading State (only if 0 recalls) */}
               {syncState.status === 'loading' && allRecalls.length === 0 ? (
                 <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-slate-200/80 p-8 shadow-xs">
                   <div className="inline-flex p-3 bg-red-50 rounded-2xl text-red-600 animate-spin">
@@ -237,7 +250,7 @@ export const App: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                /* RESPONSIVE CARDS GRID: 1 col on mobile, 2 col on tablet, 2-3 col on desktop */
+                /* RESPONSIVE CARDS GRID */
                 <div className="space-y-4">
                   {filteredRecalls.length === 0 ? (
                     <div className="py-16 text-center bg-white rounded-3xl border border-slate-200/80 p-8 space-y-2 shadow-xs">

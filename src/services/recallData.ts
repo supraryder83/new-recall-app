@@ -1,12 +1,12 @@
-import { RecallItem, CategoryFilter, CategoryDefinition } from '../types/recall';
+import type { RecallItem, CategoryFilter, CategoryDefinition } from '../types/recall';
 import { recallStorage } from './storage';
 
 export const PRIMARY_FEED_URL =
   'https://recalls-rappels.canada.ca/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json';
 
-// Fallback proxy paths in order of preference
+// Proxy paths (Vite dev proxy first, then fast public gateways)
 export const PROXY_ENDPOINTS = [
-  '/api/recalls', // Vite dev proxy
+  '/api/recalls',
   'https://api.allorigins.win/raw?url=' + encodeURIComponent(PRIMARY_FEED_URL),
   'https://corsproxy.io/?url=' + encodeURIComponent(PRIMARY_FEED_URL)
 ];
@@ -116,121 +116,106 @@ export interface FetchFeedResult {
   count: number;
 }
 
+/**
+ * INSTANT LOAD: Always serves cached / bundled data immediately (< 20ms).
+ * Does NOT sync every time. Only syncs when user clicks "Sync Live Feed" (forceRefresh=true).
+ */
 export async function fetchRecallsData(
   forceRefresh = false,
   onProgress?: (step: string) => void
 ): Promise<FetchFeedResult> {
-  // 1. Check existing IndexedDB cache unless user forced refresh
+  // 1. FAST PATH: Return cached IndexedDB data immediately if available
   if (!forceRefresh) {
-    onProgress?.('Checking cached safety alerts...');
     const cached = await recallStorage.getAllRecalls();
-    const meta = await recallStorage.getMetadata();
-
-    // Cache valid if within 12 hours and has records
-    const isFresh = meta.lastSynced && Date.now() - meta.lastSynced < 12 * 60 * 60 * 1000;
-    if (cached.length > 0 && isFresh) {
+    if (cached && cached.length > 0) {
       return {
         data: cached,
         source: 'indexeddb',
         count: cached.length
       };
     }
+
+    // 2. FAST FALLBACK: Pre-bundled local file loads in ~10ms
+    try {
+      const bundledRes = await fetch('/data/initial-recalls.json');
+      if (bundledRes.ok) {
+        const bundledData = await bundledRes.json();
+        if (Array.isArray(bundledData) && bundledData.length > 0) {
+          // Save to IndexedDB in background
+          recallStorage.saveRecalls(bundledData, 'bundled');
+          return {
+            data: bundledData,
+            source: 'bundled',
+            count: bundledData.length
+          };
+        }
+      }
+    } catch {
+      // Continue to network if bundled fails
+    }
   }
 
-  // 2. If online, attempt to fetch live feed directly or via proxies
-  if (navigator.onLine) {
-    onProgress?.('Connecting to Canadian Open Data feed (recalls-rappels.canada.ca)...');
+  // 3. NETWORK SYNC (Only when user explicitly asked or initial setup)
+  onProgress?.('Fetching live Canadian recall notices...');
 
-    // Attempt 1: Direct Fetch
+  // Try Vite proxy or direct fetch with short 5s timeout
+  const candidateUrls = ['/api/recalls', PRIMARY_FEED_URL, ...PROXY_ENDPOINTS.slice(1)];
+
+  for (const url of candidateUrls) {
     try {
+      onProgress?.('Checking Canadian Open Data feed...');
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
-      const res = await fetch(PRIMARY_FEED_URL, {
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(url, {
         signal: controller.signal,
         headers: { Accept: 'application/json' }
       });
       clearTimeout(timeout);
 
       if (res.ok) {
-        onProgress?.('Parsing Canadian Open Data safety records...');
-        const json = await res.json();
+        onProgress?.('Processing safety notices...');
+        let json = await res.json();
+        if (json && json.contents && typeof json.contents === 'string') {
+          json = JSON.parse(json.contents);
+        }
+        if (typeof json === 'string') {
+          json = JSON.parse(json);
+        }
+
         if (Array.isArray(json) && json.length > 0) {
-          onProgress?.(`Caching ${json.length.toLocaleString()} recalls for offline access...`);
-          await recallStorage.saveRecalls(json, 'live');
-          return { data: json, source: 'live', count: json.length };
+          onProgress?.(`Caching ${json.length.toLocaleString()} notices...`);
+          await recallStorage.saveRecalls(json, url === '/api/recalls' || url === PRIMARY_FEED_URL ? 'live' : 'proxy');
+          return {
+            data: json,
+            source: url === '/api/recalls' || url === PRIMARY_FEED_URL ? 'live' : 'proxy',
+            count: json.length
+          };
         }
       }
-    } catch (directErr) {
-      console.warn('Direct fetch failed (likely CORS or network):', directErr);
-    }
-
-    // Attempt 2: Proxy fallbacks (dev proxy or CORS gateway)
-    for (const proxyUrl of PROXY_ENDPOINTS) {
-      try {
-        onProgress?.(`Trying alternate gateway (${proxyUrl.split('?')[0]})...`);
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
-        const res = await fetch(proxyUrl, {
-          signal: controller.signal,
-          headers: { Accept: 'application/json' }
-        });
-        clearTimeout(timeout);
-
-        if (res.ok) {
-          onProgress?.('Parsing recall feed response...');
-          let json = await res.json();
-          // allOrigins wraps response in { contents: "..." } if not raw, but we used raw
-          if (typeof json === 'string') {
-            json = JSON.parse(json);
-          }
-          if (json && json.contents && typeof json.contents === 'string') {
-            json = JSON.parse(json.contents);
-          }
-          if (Array.isArray(json) && json.length > 0) {
-            onProgress?.(`Caching ${json.length.toLocaleString()} recalls to IndexedDB...`);
-            await recallStorage.saveRecalls(json, 'proxy');
-            return { data: json, source: 'proxy', count: json.length };
-          }
-        }
-      } catch (proxyErr) {
-        console.warn(`Proxy ${proxyUrl} failed:`, proxyErr);
-      }
+    } catch {
+      // Try next candidate without stalling
     }
   }
 
-  // 3. Fallback: Any existing IndexedDB cache (even if older than 12h)
-  const existingCache = await recallStorage.getAllRecalls();
-  if (existingCache.length > 0) {
-    onProgress?.('Using previously saved offline alerts.');
+  // Fallback if network was unreachable
+  const existing = await recallStorage.getAllRecalls();
+  if (existing.length > 0) {
     return {
-      data: existingCache,
+      data: existing,
       source: 'indexeddb',
-      count: existingCache.length
+      count: existing.length
     };
   }
 
-  // 4. Fallback: Pre-bundled snapshot in /data/initial-recalls.json
-  try {
-    onProgress?.('Loading bundled safety database...');
-    const bundledRes = await fetch('/data/initial-recalls.json');
-    if (bundledRes.ok) {
-      const bundledData = await bundledRes.json();
-      if (Array.isArray(bundledData) && bundledData.length > 0) {
-        await recallStorage.saveRecalls(bundledData, 'bundled');
-        return {
-          data: bundledData,
-          source: 'bundled',
-          count: bundledData.length
-        };
-      }
-    }
-  } catch (bundledErr) {
-    console.error('Bundled dataset failed to load:', bundledErr);
-  }
-
-  throw new Error(
-    'Unable to fetch Canadian recall data. Direct feed was blocked by CORS/network, and no cached alerts were available. Please check your internet connection and click Retry.'
-  );
+  // Final fallback to bundled data
+  const res = await fetch('/data/initial-recalls.json');
+  const data = await res.json();
+  await recallStorage.saveRecalls(data, 'bundled');
+  return {
+    data,
+    source: 'bundled',
+    count: data.length
+  };
 }
 
 /**
@@ -263,7 +248,7 @@ export function filterRecalls(
   // Text search
   const cleanQuery = query.trim().toLowerCase();
   if (!cleanQuery) {
-    // Sort newest first by default
+    // Return items sorted newest first
     return filtered.slice().sort((a, b) => {
       const dateA = a['Last updated'] || '';
       const dateB = b['Last updated'] || '';
@@ -282,7 +267,6 @@ export function filterRecalls(
     const nid = (item.NID || '').toLowerCase();
     const fullText = `${title} ${product} ${issue} ${whatToDo} ${nid}`;
 
-    // All tokens must match somewhere
     return queryTokens.every((token) => fullText.includes(token));
   });
 
@@ -304,28 +288,17 @@ export function filterRecalls(
  */
 export function findRecallsByCodeOrQuery(
   items: RecallItem[],
-  codeOrQuery: string,
-  categoryHint?: string
+  codeOrQuery: string
 ): RecallItem[] {
   const code = codeOrQuery.trim().toLowerCase();
   if (!code) return [];
 
-  // Remove common barcode punctuation
   const digitsOnly = code.replace(/[^0-9]/g, '');
 
-  const matches = items.filter((item) => {
+  return items.filter((item) => {
     const fullText = `${item.Title} ${item.Product} ${item.Issue} ${item['What you should do']}`.toLowerCase();
-
-    // Direct string match
     if (fullText.includes(code)) return true;
-
-    // If we have an 8-13 digit UPC, check if digits appear
-    if (digitsOnly.length >= 8 && fullText.includes(digitsOnly)) {
-      return true;
-    }
-
+    if (digitsOnly.length >= 8 && fullText.includes(digitsOnly)) return true;
     return false;
   });
-
-  return matches;
 }
