@@ -584,6 +584,7 @@ export const App: React.FC = () => {
         <BottomNavBar
           currentTab={currentTab}
           onTabChange={(tab) => setCurrentTab(tab)}
+          onOpenScanner={() => setIsScannerOpen(true)}
         />
 
         {/* MODALS */}
