@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Database, ArrowRight } from 'lucide-react';
+import { Barcode, Database, ArrowRight } from 'lucide-react';
 import type { CategoryFilter } from '../types/recall';
 
 interface HeroBannerProps {
@@ -36,8 +36,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
         {/* Subtitle */}
         <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal">
-          Instant safety alerts directly from Health Canada, CFIA, and Transport Canada. Snap a photo
-          of any product packaging, barcode, or serial number with <strong>AI Vision Recognition</strong> to identify it and cross-reference safety hazards immediately.
+          Instant safety alerts directly from Health Canada, CFIA, and Transport Canada. Scan any product
+          <strong> barcode</strong> for instant recall checks (no AI required), or photograph an unboxed item,
+          model code, or serial number with <strong>AI Vision Recognition</strong>.
         </p>
 
         {/* Disclaimer Note */}
@@ -52,8 +53,8 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             onClick={onOpenScanner}
             className="px-5 py-3 bg-red-600 hover:bg-red-700 text-white font-extrabold text-sm rounded-2xl shadow-lg shadow-red-600/30 flex items-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
-            <Camera className="w-4 h-4" />
-            <span>Take Photo to Check Recalls</span>
+            <Barcode className="w-4 h-4" />
+            <span>Scan Barcode to Check Recalls</span>
             <ArrowRight className="w-4 h-4 ml-0.5" />
           </button>
 

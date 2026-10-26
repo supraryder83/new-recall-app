@@ -4,8 +4,7 @@ import {
   RefreshCw,
   Search,
   ChevronDown,
-  Sparkles,
-  Camera,
+  Barcode,
   BellRing
 } from 'lucide-react';
 import type { RecallItem, CategoryFilter, DatasetSyncState, ScanHistoryItem } from './types/recall';
@@ -222,7 +221,7 @@ export const App: React.FC = () => {
       />
 
       {/* MAIN RESPONSIVE CONTAINER */}
-      <div className="flex-1 flex flex-col min-w-0 bg-slate-50 min-h-screen">
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-50 min-h-screen overflow-x-hidden w-full max-w-full">
         {/* MOBILE TOP BAR (Visible on mobile only, hidden on md+) */}
         <div className="md:hidden">
           <Header
@@ -309,14 +308,14 @@ export const App: React.FC = () => {
               onClick={() => setIsScannerOpen(true)}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2"
             >
-              <Camera className="w-3.5 h-3.5" />
-              <span>AI Recall Scanner</span>
+              <Barcode className="w-3.5 h-3.5" />
+              <span>Scan Barcode</span>
             </button>
           </div>
         </div>
 
         {/* MAIN BODY CONTENT */}
-        <main className="flex-1 px-3.5 sm:px-6 py-4 space-y-4 max-w-6xl w-full mx-auto pb-24 md:pb-10">
+        <main className="flex-1 px-3.5 sm:px-6 py-4 space-y-4 max-w-6xl w-full mx-auto pb-24 md:pb-10 min-w-0 overflow-x-hidden">
           {/* PWA Install Banner */}
           {showInstallBanner && deferredPrompt && (
             <InstallPromptBanner

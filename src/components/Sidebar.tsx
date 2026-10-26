@@ -2,7 +2,7 @@ import React from 'react';
 import {
   ShieldAlert,
   LayoutGrid,
-  Camera,
+  Barcode,
   Settings,
   RefreshCw,
   Download,
@@ -50,16 +50,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <CanadaLogo size={36} showText={true} />
         </div>
 
-        {/* Primary Action Button: Scan Product */}
+        {/* Primary Action Button: Scan Barcode */}
         <button
           type="button"
           onClick={onOpenScanner}
           className="w-full py-3 px-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-2xl font-extrabold text-sm shadow-md shadow-red-600/25 hover:shadow-red-600/35 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5"
         >
-          <Camera className="w-4 h-4" />
-          <span>Scan Product</span>
+          <Barcode className="w-4 h-4" />
+          <span>Scan Barcode</span>
           <span className="bg-white/20 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase">
-            AI
+            Fast
           </span>
         </button>
 

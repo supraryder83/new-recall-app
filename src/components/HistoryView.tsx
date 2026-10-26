@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   History,
-  Camera,
+  Barcode,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -229,32 +229,32 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const safeScans = historyItems.filter((i) => i.verdict === 'NO_RECALL_FOUND').length;
 
   return (
-    <div className="space-y-4 text-left animate-in fade-in duration-200">
+    <div className="w-full max-w-full overflow-x-hidden space-y-4 text-left animate-in fade-in duration-200">
       {/* Top Header Card */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 max-w-full min-w-0 overflow-hidden">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <div className="p-2 bg-red-50 text-red-600 rounded-xl">
-              <History className="w-5 h-5" />
+            <div className="p-1.5 sm:p-2 bg-red-50 text-red-600 rounded-xl shrink-0">
+              <History className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+            <h2 className="text-lg sm:text-2xl font-extrabold text-slate-900 tracking-tight break-words">
               Product Scan History
             </h2>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500">
+          <p className="text-xs sm:text-sm text-slate-500 break-words [overflow-wrap:anywhere]">
             Permanent safety log & continuous 6-hour Canadian recall monitoring
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto self-stretch sm:self-auto min-w-0">
           {totalScans > 0 && (
             <button
               type="button"
               onClick={handleExport}
-              className="px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all border border-slate-200/80 flex items-center gap-1.5 shadow-2xs active:scale-95"
+              className="flex-1 sm:flex-initial px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all border border-slate-200/80 flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 whitespace-nowrap min-w-0"
               title="Download scan history as CSV file"
             >
-              <Download className="w-4 h-4 text-slate-600" />
+              <Download className="w-3.5 h-3.5 shrink-0" />
               <span>Save as CSV</span>
             </button>
           )}
@@ -262,52 +262,52 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <button
             type="button"
             onClick={onOpenScanner}
-            className="flex-1 sm:flex-initial px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 active:scale-95"
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap min-w-0"
           >
-            <Camera className="w-4 h-4" />
-            <span>Scan Product</span>
+            <Barcode className="w-4 h-4 shrink-0" />
+            <span>Scan Barcode</span>
           </button>
         </div>
       </div>
 
       {/* 6-Hour Safety Verification & Notification Monitor Card */}
-      <div className="bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-slate-800 space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 bg-red-500/20 text-red-400 rounded-2xl border border-red-500/30 shrink-0 mt-0.5">
-              <Shield className="w-6 h-6" />
+      <div className="bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-md border border-slate-800 space-y-3 sm:space-y-4 max-w-full min-w-0 overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 min-w-0">
+          <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="p-2 sm:p-2.5 bg-red-500/20 text-red-400 rounded-2xl border border-red-500/30 shrink-0 mt-0.5">
+              <Shield className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-extrabold text-base sm:text-lg text-white">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
+                <h3 className="font-extrabold text-sm sm:text-lg text-white break-words">
                   6-Hour Safety Recall Monitor
                 </h3>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Active (Every 6h)
+                  Active (6h)
                 </span>
               </div>
-              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                Checks <strong>only the products in your scan history</strong> against Health Canada, CFIA, and Transport Canada safety databases every 6 hours. Notifications from different variations of the same product are consolidated into 1 notification and tracked to prevent duplicate alerts.
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed break-words [overflow-wrap:anywhere]">
+                Checks <strong>only products in your scan history</strong> against Health Canada, CFIA, and Transport Canada safety databases every 6 hours. Notifications from variations of the same product are consolidated to prevent duplicates.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-center">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto self-start md:self-center min-w-0">
             {/* Notification Permission Toggle */}
             {notificationsGranted ? (
-              <span className="px-3 py-2 bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5">
-                <BellRing className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="flex-1 sm:flex-initial px-3 py-2 bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap min-w-0">
+                <BellRing className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>Alerts On</span>
               </span>
             ) : (
               <button
                 type="button"
                 onClick={handleRequestNotifications}
-                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                className="flex-1 sm:flex-initial px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95 whitespace-nowrap min-w-0"
                 title="Enable browser notifications for recall alerts"
               >
-                <Bell className="w-3.5 h-3.5" />
+                <Bell className="w-3.5 h-3.5 shrink-0" />
                 <span>Enable Alerts</span>
               </button>
             )}
@@ -317,30 +317,30 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               type="button"
               onClick={handleVerifyNow}
               disabled={isVerifyingNow || totalScans === 0}
-              className="px-3.5 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all border border-white/20 flex items-center gap-1.5 active:scale-95"
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all border border-white/20 flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap min-w-0"
               title="Run on-demand check of history items against latest Canadian recall records"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isVerifyingNow ? 'animate-spin text-red-400' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isVerifyingNow ? 'animate-spin text-red-400' : ''}`} />
               <span>{isVerifyingNow ? 'Verifying...' : 'Verify Now'}</span>
             </button>
           </div>
         </div>
 
         {/* Verification Status Details & Timestamps */}
-        <div className="pt-2 border-t border-slate-700/60 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-          <div className="flex items-center gap-4 flex-wrap">
-            <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Last Checked:</span>
-              <strong className="text-slate-200">
+        <div className="pt-2 border-t border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 text-xs text-slate-400 min-w-0">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0">
+            <span className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="shrink-0">Last Checked:</span>
+              <strong className="text-slate-200 break-words">
                 {lastCheckTime ? formatTimestamp(lastCheckTime) : 'Checking automatically'}
               </strong>
             </span>
 
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span>Next Check:</span>
-              <strong className="text-slate-200">
+            <span className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="shrink-0">Next Check:</span>
+              <strong className="text-slate-200 break-words">
                 {nextCheckTime ? (
                   Date.now() >= nextCheckTime
                     ? 'Due now'
@@ -356,43 +356,43 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowNotifiedLog(!showNotifiedLog)}
-                className="flex items-center gap-1.5 text-slate-300 hover:text-white underline underline-offset-2"
+                className="flex items-center gap-1 text-slate-300 hover:text-white underline underline-offset-2 shrink-0"
               >
-                <BellRing className="w-3.5 h-3.5 text-amber-400" />
+                <BellRing className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>{notifiedRecords.length} Notification{notifiedRecords.length === 1 ? '' : 's'} Tracked</span>
                 <ChevronDown className={`w-3 h-3 transition-transform ${showNotifiedLog ? 'rotate-180' : ''}`} />
               </button>
             )}
           </div>
 
-          <span className="text-[11px] text-slate-400 italic">
+          <span className="text-[10px] sm:text-[11px] text-slate-400 italic break-words [overflow-wrap:anywhere]">
             Scan history is permanent and cannot be cleared
           </span>
         </div>
 
         {/* Expandable Sent Notifications Log */}
         {showNotifiedLog && notifiedRecords.length > 0 && (
-          <div className="mt-3 p-4 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-2 text-xs animate-in fade-in">
-            <div className="flex items-center justify-between font-bold text-slate-200">
-              <span className="flex items-center gap-1.5">
-                <BellRing className="w-3.5 h-3.5 text-red-400" />
-                <span>Tracked Recall Notifications Log (No Duplicates)</span>
+          <div className="mt-3 p-3.5 sm:p-4 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-2 text-xs animate-in fade-in max-w-full min-w-0 overflow-hidden">
+            <div className="flex items-center justify-between font-bold text-slate-200 min-w-0">
+              <span className="flex items-center gap-1.5 truncate">
+                <BellRing className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                <span className="truncate">Tracked Recall Notifications Log (No Duplicates)</span>
               </span>
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[11px] text-slate-400 shrink-0 ml-2">
                 {notifiedRecords.length} item{notifiedRecords.length === 1 ? '' : 's'}
               </span>
             </div>
-            <div className="max-h-48 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-700/50">
+            <div className="max-h-48 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-700/50 min-w-0">
               {notifiedRecords.map((rec) => (
-                <div key={rec.key} className="pt-2 first:pt-0 flex items-start justify-between gap-3">
+                <div key={rec.key} className="pt-2 first:pt-0 flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-3 min-w-0">
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-slate-200 truncate">{rec.itemTitle}</p>
-                    <p className="text-[11px] text-red-300 truncate">{rec.recallTitle}</p>
+                    <p className="font-bold text-slate-200 break-words [overflow-wrap:anywhere]">{rec.itemTitle}</p>
+                    <p className="text-[11px] text-red-300 break-words [overflow-wrap:anywhere]">{rec.recallTitle}</p>
                     {rec.hazard && (
-                      <p className="text-[10px] text-slate-400 truncate mt-0.5">{rec.hazard}</p>
+                      <p className="text-[10px] text-slate-400 break-words [overflow-wrap:anywhere] mt-0.5">{rec.hazard}</p>
                     )}
                   </div>
-                  <span className="text-[10px] text-slate-400 shrink-0">
+                  <span className="text-[10px] text-slate-400 shrink-0 sm:self-start">
                     {formatTimestamp(rec.notifiedAt)}
                   </span>
                 </div>
@@ -403,7 +403,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
         {/* On-demand Feedback Banner */}
         {verificationFeedback && (
-          <div className="p-3 bg-white/10 border border-white/20 rounded-xl text-xs text-white animate-in fade-in">
+          <div className="p-3 bg-white/10 border border-white/20 rounded-xl text-xs text-white animate-in fade-in break-words [overflow-wrap:anywhere]">
             {verificationFeedback}
           </div>
         )}
@@ -411,30 +411,30 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       {/* Summary KPI Badges */}
       {totalScans > 0 && (
-        <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-              Permanent Scans
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 max-w-full min-w-0">
+          <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-xs min-w-0 overflow-hidden text-center sm:text-left">
+            <span className="text-[9px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider block truncate">
+              Total Scans
             </span>
-            <span className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-0.5 block">
+            <span className="text-lg sm:text-2xl font-extrabold text-slate-900 mt-0.5 block truncate">
               {totalScans}
             </span>
           </div>
 
-          <div className="bg-red-50/70 p-3.5 sm:p-4 rounded-2xl border border-red-200/80 shadow-xs">
-            <span className="text-[11px] font-bold text-red-600 uppercase tracking-wider block">
-              Recalls Flagged
+          <div className="bg-red-50/70 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-red-200/80 shadow-xs min-w-0 overflow-hidden text-center sm:text-left">
+            <span className="text-[9px] sm:text-[11px] font-bold text-red-600 uppercase tracking-tight sm:tracking-wider block truncate">
+              Recalls Found
             </span>
-            <span className="text-xl sm:text-2xl font-extrabold text-red-700 mt-0.5 block">
+            <span className="text-lg sm:text-2xl font-extrabold text-red-700 mt-0.5 block truncate">
               {flaggedRecalls}
             </span>
           </div>
 
-          <div className="bg-emerald-50/70 p-3.5 sm:p-4 rounded-2xl border border-emerald-200/80 shadow-xs">
-            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
+          <div className="bg-emerald-50/70 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-emerald-200/80 shadow-xs min-w-0 overflow-hidden text-center sm:text-left">
+            <span className="text-[9px] sm:text-[11px] font-bold text-emerald-700 uppercase tracking-tight sm:tracking-wider block truncate">
               Safe Items
             </span>
-            <span className="text-xl sm:text-2xl font-extrabold text-emerald-700 mt-0.5 block">
+            <span className="text-lg sm:text-2xl font-extrabold text-emerald-700 mt-0.5 block truncate">
               {safeScans}
             </span>
           </div>
@@ -443,37 +443,37 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       {/* Empty State */}
       {totalScans === 0 ? (
-        <div className="py-16 px-6 text-center bg-white rounded-3xl border border-slate-200/80 space-y-4 shadow-xs">
+        <div className="py-14 sm:py-16 px-4 sm:px-6 text-center bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 space-y-4 shadow-xs max-w-full min-w-0 overflow-hidden">
           <div className="w-16 h-16 mx-auto bg-red-50 text-red-600 rounded-3xl flex items-center justify-center shadow-inner">
-            <Camera className="w-8 h-8 animate-pulse-subtle" />
+            <Barcode className="w-8 h-8 animate-pulse-subtle" />
           </div>
-          <div className="max-w-md mx-auto space-y-1.5">
-            <h3 className="font-extrabold text-lg text-slate-900">No Product Scans Yet</h3>
-            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              When you snap a photo of any grocery item, household product, barcode, or serial number, the AI scanner will identify it, check for active Canadian recalls, and save it to your permanent safety log for continuous 6-hour monitoring.
+          <div className="max-w-md mx-auto space-y-1.5 min-w-0">
+            <h3 className="font-extrabold text-lg text-slate-900 break-words">No Product Scans Yet</h3>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed break-words [overflow-wrap:anywhere]">
+              When you scan a barcode or photograph any product, serial number, or model code, the system will identify it, check for active Canadian recalls, and save it to your permanent safety log for continuous 6-hour monitoring.
             </p>
           </div>
           <button
             type="button"
             onClick={onOpenScanner}
-            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs sm:text-sm font-extrabold transition-all shadow-md shadow-red-600/30 inline-flex items-center gap-2 active:scale-95"
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs sm:text-sm font-extrabold transition-all shadow-md shadow-red-600/30 inline-flex items-center justify-center gap-2 active:scale-95 whitespace-nowrap"
           >
-            <Camera className="w-4 h-4" />
-            <span>Take Your First Scan</span>
+            <Barcode className="w-4 h-4" />
+            <span>Scan Your First Barcode</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       ) : (
         /* History Log Grid */
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+        <div className="space-y-3 max-w-full min-w-0">
+          <div className="flex items-center justify-between px-1 min-w-0">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider truncate">
               Recorded Scans ({totalScans})
             </span>
             <button
               type="button"
               onClick={handleExport}
-              className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 hover:underline"
+              className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 hover:underline shrink-0 ml-2"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export CSV</span>
@@ -482,7 +482,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
           {historyItems.map((item) => {
             const isMatch = item.verdict === 'MATCH_FOUND';
-            const isPossible = item.verdict === 'POSSIBLE_MATCH';
             const isNewlyRecalled = item.isNewlyRecalled === true;
 
             // Check if any matched recall on this item has been tracked as notified
@@ -494,7 +493,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             return (
               <div
                 key={item.id}
-                className={`bg-white rounded-2xl p-4 sm:p-5 border shadow-xs transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group ${
+                className={`bg-white rounded-2xl p-3.5 sm:p-5 border shadow-xs transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 group max-w-full min-w-0 overflow-hidden w-full ${
                   isNewlyRecalled
                     ? 'border-red-400 ring-2 ring-red-500/20 bg-red-50/20'
                     : isMatch
@@ -503,9 +502,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 }`}
               >
                 {/* Left Section: Thumbnail & Identifiers */}
-                <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                <div className="flex items-start gap-3 min-w-0 w-full flex-1 overflow-hidden">
                   {/* Photo Thumbnail or Placeholder */}
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center relative">
+                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center relative">
                     {item.imagePreview ? (
                       <img
                         src={item.imagePreview}
@@ -513,28 +512,28 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="p-2 text-slate-400 flex flex-col items-center">
-                        <Tag className="w-6 h-6" />
-                        <span className="text-[9px] mt-0.5 font-bold uppercase">Item</span>
+                      <div className="p-1.5 text-slate-400 flex flex-col items-center justify-center">
+                        <Tag className="w-5 h-5 sm:w-6 sm:h-6" />
+                        <span className="text-[8px] sm:text-[9px] font-bold uppercase">Item</span>
                       </div>
                     )}
                   </div>
 
                   {/* Title & Metadata */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap min-w-0">
                       {/* Status Verdict Badge */}
                       <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wide shrink-0 ${
                           isMatch
                             ? 'bg-red-100 text-red-800 border border-red-200'
                             : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                         }`}
                       >
                         {isMatch ? (
-                          <ShieldAlert className="w-3 h-3 text-red-600" />
+                          <ShieldAlert className="w-3 h-3 text-red-600 shrink-0" />
                         ) : (
-                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                          <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
                         )}
                         <span>
                           {isMatch
@@ -545,83 +544,83 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                       {/* 6-Hour Monitor Recall Alert Badge */}
                       {isNewlyRecalled && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-red-600 text-white animate-pulse">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase bg-red-600 text-white animate-pulse shrink-0">
                           <span>🚨 Recalled After Scan</span>
                         </span>
                       )}
 
                       {/* Notified Tracking Status Badge */}
                       {hasTrackedNotification && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                          <BellRing className="w-3 h-3 text-slate-500" />
-                          <span>Notified (Logged)</span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                          <BellRing className="w-3 h-3 text-slate-500 shrink-0" />
+                          <span>Notified</span>
                         </span>
                       )}
 
                       {/* Extracted Category */}
                       {item.extractedInfo?.category && (
-                        <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                        <span className="text-[9px] sm:text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[120px]">
                           {item.extractedInfo.category}
                         </span>
                       )}
 
                       {/* Time ago */}
-                      <span className="text-[10px] text-slate-400 flex items-center gap-1 ml-auto">
-                        <Clock className="w-3 h-3" />
-                        {formatTimestamp(item.timestamp)}
+                      <span className="text-[9px] sm:text-[10px] text-slate-400 flex items-center gap-1 shrink-0 ml-auto">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span>{formatTimestamp(item.timestamp)}</span>
                       </span>
                     </div>
 
-                    <h4 className="font-extrabold text-sm sm:text-base text-slate-900 group-hover:text-red-600 transition-colors truncate">
+                    <h4 className="font-extrabold text-sm sm:text-base text-slate-900 group-hover:text-red-600 transition-colors break-words [overflow-wrap:anywhere] leading-snug">
                       {item.identifiedTitle}
                     </h4>
 
                     {item.matchReason && (
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-1">
+                      <p className="text-xs text-slate-500 mt-1 break-words [overflow-wrap:anywhere] line-clamp-2 leading-relaxed">
                         {item.matchReason}
                       </p>
                     )}
 
                     {/* Variant / Size info */}
                     {(item.extractedInfo?.flavorOrVariant || item.extractedInfo?.packageSize) && (
-                      <span className="text-[11px] text-slate-600 font-medium mt-0.5 block">
+                      <span className="text-[11px] text-slate-600 font-medium mt-0.5 block break-words [overflow-wrap:anywhere]">
                         {[item.extractedInfo.flavorOrVariant, item.extractedInfo.packageSize].filter(Boolean).join(' • ')}
                       </span>
                     )}
 
                     {/* Batch / Model info */}
                     {(item.extractedInfo?.modelOrLot || item.extractedInfo?.modelOrBatchNumber) && (
-                      <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
+                      <span className="text-[10px] text-slate-400 font-mono mt-0.5 block break-all">
                         Batch/Model: {item.extractedInfo.modelOrLot || item.extractedInfo.modelOrBatchNumber}
                       </span>
                     )}
 
                     {/* 6-Hour Verification Status Timestamp */}
-                    <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400">
-                      <span className="inline-flex items-center gap-1 text-slate-500">
-                        <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 min-w-0">
+                      <span className="inline-flex items-center gap-1 text-slate-500 shrink-0">
+                        <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
                         <span>Protected by 6h monitor</span>
                       </span>
                       {item.lastCheckedAt && (
-                        <span>• Verified {formatTimestamp(item.lastCheckedAt)}</span>
+                        <span className="break-words">• Verified {formatTimestamp(item.lastCheckedAt)}</span>
                       )}
                     </div>
                   </div>
                 </div>
 
                 {/* Right Section: Actions */}
-                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <div className="flex items-center gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 min-w-0">
                   <button
                     type="button"
                     onClick={() => {
                       const query = item.searchKeywords || item.identifiedTitle;
                       onApplySearchQuery(query);
                     }}
-                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                    className="flex-1 sm:flex-initial px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 min-w-0 truncate"
                     title="Search Canadian Recalls for this item"
                   >
-                    <Search className="w-3.5 h-3.5" />
-                    <span>Search Recalls</span>
+                    <Search className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Search Recalls</span>
                   </button>
 
                   {item.matchedRecalls && item.matchedRecalls.length > 0 ? (
@@ -632,11 +631,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           onSelectRecall(item.matchedRecalls[0]);
                         }
                       }}
-                      className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
+                      className="flex-1 sm:flex-initial px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs min-w-0 truncate"
                       title="View active safety notice"
                     >
-                      <span>View Notice{item.matchedRecalls.length > 1 ? ` (${item.matchedRecalls.length})` : ''}</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
+                      <span className="truncate">Notice{item.matchedRecalls.length > 1 ? ` (${item.matchedRecalls.length})` : ''}</span>
+                      <ChevronRight className="w-3.5 h-3.5 shrink-0" />
                     </button>
                   ) : null}
                 </div>
