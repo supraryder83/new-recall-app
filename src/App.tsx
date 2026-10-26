@@ -174,7 +174,7 @@ export const App: React.FC = () => {
             {/* Gemini Vision badge */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Gemini 2.5 Flash Lite</span>
+              <span>Gemini 3.5 Flash Lite</span>
             </div>
           </div>
         </div>
