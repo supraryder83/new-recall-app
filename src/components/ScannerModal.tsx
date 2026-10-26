@@ -421,6 +421,8 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
         matchedRecallsCount: result.matchedRecalls.length,
         extractedInfo: result.extractedInfo,
         matchedRecalls: result.matchedRecalls,
+        similarProductRecalls: result.similarProductRecalls,
+        relatedBrandRecalls: result.relatedBrandRecalls,
         searchKeywords: result.searchKeywords
       });
 
@@ -807,9 +809,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
               className={`p-5 rounded-2xl border text-left shadow-sm ${
                 scanResult.verdict === 'MATCH_FOUND'
                   ? 'bg-red-50 border-red-200 text-red-950'
-                  : scanResult.verdict === 'POSSIBLE_MATCH'
-                    ? 'bg-amber-50 border-amber-200 text-amber-950'
-                    : 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-950'
               }`}
             >
               <div className="flex items-start gap-3.5">
@@ -817,15 +817,11 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
                   className={`p-3 rounded-2xl shrink-0 ${
                     scanResult.verdict === 'MATCH_FOUND'
                       ? 'bg-red-600 text-white shadow-lg shadow-red-500/30'
-                      : scanResult.verdict === 'POSSIBLE_MATCH'
-                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
-                        : 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                      : 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
                   }`}
                 >
                   {scanResult.verdict === 'MATCH_FOUND' ? (
                     <ShieldAlert className="w-6 h-6 animate-pulse" />
-                  ) : scanResult.verdict === 'POSSIBLE_MATCH' ? (
-                    <AlertTriangle className="w-6 h-6" />
                   ) : (
                     <ShieldCheck className="w-6 h-6" />
                   )}
@@ -833,10 +829,8 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
                 <div>
                   <h4 className="font-extrabold text-base sm:text-lg">
                     {scanResult.verdict === 'MATCH_FOUND'
-                      ? 'Potential Recall Detected!'
-                      : scanResult.verdict === 'POSSIBLE_MATCH'
-                        ? 'Possible Recall Match Found'
-                        : 'No Active Recall Detected in Dataset'}
+                      ? 'Exact Product Safety Recall Confirmed!'
+                      : 'No Active Recall For This Exact Product'}
                   </h4>
                   <p className="text-xs sm:text-sm mt-1 opacity-90 leading-relaxed">
                     {scanResult.matchReason}
@@ -895,13 +889,13 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
               )}
             </div>
 
-            {/* Matched Recalls with ALL DETAILS */}
+            {/* Matched Recalls with ALL DETAILS (Exact Product Matches) */}
             {scanResult.matchedRecalls.length > 0 && (
               <div className="space-y-3.5 text-left">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-red-600 flex items-center gap-1.5">
                     <ShieldAlert className="w-4 h-4" />
-                    <span>Official Safety Notice Details ({scanResult.matchedRecalls.length})</span>
+                    <span>Official Exact Product Safety Notice Details ({scanResult.matchedRecalls.length})</span>
                   </span>
                   <span className="text-[11px] text-slate-500 font-semibold">
                     Complete government notices
@@ -934,6 +928,9 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
                               {recallClass}
                             </span>
                           )}
+                          <span className="bg-red-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider shadow-2xs">
+                            Exact Product Match
+                          </span>
                           {recall.Organization && (
                             <span className="bg-white text-slate-700 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded">
                               {recall.Organization}
@@ -1025,6 +1022,181 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Brand & Similar Product Advisories Section */}
+            {((scanResult.similarProductRecalls && scanResult.similarProductRecalls.length > 0) ||
+              (scanResult.relatedBrandRecalls && scanResult.relatedBrandRecalls.length > 0)) && (
+              <div className="space-y-3.5 text-left pt-2">
+                <div className="p-4 bg-amber-50/80 border-2 border-amber-200/90 rounded-2xl shadow-xs space-y-1.5">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-1.5 bg-amber-500 text-white rounded-lg shadow-2xs shrink-0 mt-0.5">
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sm sm:text-base text-amber-950">
+                        Brand & Similar Product Advisories (
+                        {(scanResult.similarProductRecalls?.length || 0) +
+                          (scanResult.relatedBrandRecalls?.length || 0)}
+                        )
+                      </h4>
+                      <p className="text-xs text-amber-900/80 mt-0.5 leading-relaxed">
+                        {scanResult.verdict === 'MATCH_FOUND'
+                          ? `In addition to your exact product, Health Canada has active safety notices for other ${
+                              scanResult.extractedInfo?.brand || ''
+                            } products or variants:`
+                          : `Your photographed item does not match any active recall. However, Health Canada has issued recalls for other ${
+                              scanResult.extractedInfo?.brand || ''
+                            } items or similar product variants for your awareness:`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                  {/* Similar Product Line Recalls */}
+                  {scanResult.similarProductRecalls?.map((recall, index) => (
+                    <div
+                      key={`similar-${recall.NID || index}`}
+                      className="p-4 bg-amber-50/40 border border-amber-200 hover:border-amber-300 rounded-2xl shadow-2xs text-left space-y-2.5 transition-all"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="bg-amber-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider shadow-2xs">
+                          Similar Variant / Line
+                        </span>
+                        {recall.Organization && (
+                          <span className="bg-white text-slate-700 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded">
+                            {recall.Organization}
+                          </span>
+                        )}
+                        {recall.NID && (
+                          <span className="bg-white text-slate-500 border border-slate-200 font-mono text-[10px] px-2 py-0.5 rounded">
+                            ID: #{recall.NID}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1 ml-auto">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          {recall['Last updated']}
+                        </span>
+                      </div>
+
+                      <h5 className="font-bold text-xs sm:text-sm text-slate-900 leading-snug">
+                        {recall.Title}
+                      </h5>
+
+                      {recall.Product && (
+                        <p className="text-xs text-slate-600 line-clamp-2">
+                          <strong className="text-slate-700">Affected: </strong>
+                          {recall.Product}
+                        </p>
+                      )}
+
+                      {recall.Issue && (
+                        <p className="text-xs text-amber-900 bg-amber-100/70 p-2 rounded-lg line-clamp-2 font-medium">
+                          <strong>Hazard: </strong>
+                          {recall.Issue}
+                        </p>
+                      )}
+
+                      <div className="pt-1 flex items-center gap-2">
+                        {recall.URL && (
+                          <a
+                            href={recall.URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95"
+                          >
+                            <span>Canada.ca Notice</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelectRecall(recall);
+                            onClose();
+                          }}
+                          className="py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95"
+                        >
+                          <FileText className="w-3 h-3 text-slate-500" />
+                          <span>View Details</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Other Products from the Same Brand */}
+                  {scanResult.relatedBrandRecalls?.map((recall, index) => (
+                    <div
+                      key={`brand-${recall.NID || index}`}
+                      className="p-4 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-2xl shadow-2xs text-left space-y-2.5 transition-all"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="bg-slate-700 text-white text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">
+                          Other Product from {scanResult.extractedInfo?.brand || 'Brand'}
+                        </span>
+                        {recall.Organization && (
+                          <span className="bg-white text-slate-700 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded">
+                            {recall.Organization}
+                          </span>
+                        )}
+                        {recall.NID && (
+                          <span className="bg-white text-slate-500 border border-slate-200 font-mono text-[10px] px-2 py-0.5 rounded">
+                            ID: #{recall.NID}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1 ml-auto">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          {recall['Last updated']}
+                        </span>
+                      </div>
+
+                      <h5 className="font-bold text-xs sm:text-sm text-slate-900 leading-snug">
+                        {recall.Title}
+                      </h5>
+
+                      {recall.Product && (
+                        <p className="text-xs text-slate-600 line-clamp-2">
+                          <strong className="text-slate-700">Product: </strong>
+                          {recall.Product}
+                        </p>
+                      )}
+
+                      {recall.Issue && (
+                        <p className="text-xs text-slate-700 bg-slate-100 p-2 rounded-lg line-clamp-2">
+                          <strong>Hazard: </strong>
+                          {recall.Issue}
+                        </p>
+                      )}
+
+                      <div className="pt-1 flex items-center gap-2">
+                        {recall.URL && (
+                          <a
+                            href={recall.URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1.5 px-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95"
+                          >
+                            <span>Canada.ca Notice</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelectRecall(recall);
+                            onClose();
+                          }}
+                          className="py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95"
+                        >
+                          <FileText className="w-3 h-3 text-slate-500" />
+                          <span>View Details</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

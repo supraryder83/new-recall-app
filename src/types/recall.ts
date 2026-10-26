@@ -46,7 +46,9 @@ export interface ScanMatchResult {
   identifiedTitle?: string;
   searchKeywords?: string;
   extractedInfo?: GeminiExtractionResult;
-  matchedRecalls: RecallItem[];
+  matchedRecalls: RecallItem[]; // Exact product matches only
+  similarProductRecalls?: RecallItem[]; // Recalls for similar variations/models
+  relatedBrandRecalls?: RecallItem[]; // Recalls for other products from the same brand
   matchReason?: string;
   matchScore?: number;
 }
@@ -68,7 +70,9 @@ export interface ScanHistoryItem {
   matchReason?: string;
   matchedRecallsCount: number;
   extractedInfo?: GeminiExtractionResult;
-  matchedRecalls?: RecallItem[];
+  matchedRecalls?: RecallItem[]; // Exact product matches only
+  similarProductRecalls?: RecallItem[];
+  relatedBrandRecalls?: RecallItem[];
   searchKeywords?: string;
   lastCheckedAt?: number;
   isNewlyRecalled?: boolean;

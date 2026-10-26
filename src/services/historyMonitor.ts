@@ -297,6 +297,8 @@ export async function checkHistoryAgainstRecalls(
       ...item,
       verdict: matchResult.verdict,
       matchedRecalls: matchResult.matchedRecalls,
+      similarProductRecalls: matchResult.similarProductRecalls,
+      relatedBrandRecalls: matchResult.relatedBrandRecalls,
       matchedRecallsCount: matchResult.matchedRecalls.length,
       matchReason: matchResult.matchReason,
       lastCheckedAt: now,
