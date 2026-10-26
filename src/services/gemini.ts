@@ -507,32 +507,21 @@ export function crossReferenceRecallDataset(
   };
 
   exactCandidates.sort(sortByScoreAndDate);
-  similarCandidates.sort(sortByScoreAndDate);
-  brandCandidates.sort(sortByScoreAndDate);
 
   const exactMatches = exactCandidates.map((c) => c.item);
-  const similarProductRecalls = similarCandidates.map((c) => c.item);
-  const relatedBrandRecalls = brandCandidates.map((c) => c.item);
 
   // Verdict is MATCH_FOUND ONLY if there is an EXACT match to the product in the recall DB!
   const verdict: 'MATCH_FOUND' | 'NO_RECALL_FOUND' =
     exactMatches.length > 0 ? 'MATCH_FOUND' : 'NO_RECALL_FOUND';
 
   const queryUsed = searchKeywords || identifiedTitle;
-  const topScore = exactCandidates[0]?.score || (similarCandidates[0]?.score || 0);
+  const topScore = exactCandidates[0]?.score || 0;
 
   let matchReason = '';
   if (verdict === 'MATCH_FOUND') {
     matchReason = `Identified: ${identifiedTitle} — EXACT product match found in ${exactMatches.length} active Canadian safety notice(s).`;
-  } else if (similarProductRecalls.length > 0 || relatedBrandRecalls.length > 0) {
-    const similarCount = similarProductRecalls.length;
-    const brandCount = relatedBrandRecalls.length;
-    const parts: string[] = [];
-    if (similarCount > 0) parts.push(`${similarCount} notice(s) for similar variants/models`);
-    if (brandCount > 0) parts.push(`${brandCount} other recall(s) for ${extracted.brand || 'this brand'}`);
-    matchReason = `Identified: ${identifiedTitle}. No active recalls found for this exact product. Note: ${parts.join(' and ')} exist for your awareness.`;
   } else {
-    matchReason = `Identified: ${identifiedTitle}. Checked against ${dataset.length.toLocaleString()} Canadian safety notices. No active recalls found for this product or brand.`;
+    matchReason = `Identified: ${identifiedTitle}. No active safety recalls found for this exact product in the Canadian registry.`;
   }
 
   return {
@@ -543,8 +532,8 @@ export function crossReferenceRecallDataset(
     searchKeywords,
     extractedInfo: extracted,
     matchedRecalls: exactMatches.slice(0, 15), // Exact matches ONLY
-    similarProductRecalls: similarProductRecalls.slice(0, 10), // Similar product advisories
-    relatedBrandRecalls: relatedBrandRecalls.slice(0, 10), // Brand advisories
+    similarProductRecalls: [], // Do not return similar recalls (exact matches only)
+    relatedBrandRecalls: [], // Do not return brand recalls (exact matches only)
     matchReason,
     matchScore: topScore
   };

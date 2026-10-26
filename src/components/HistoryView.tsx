@@ -5,7 +5,6 @@ import {
   Search,
   ShieldAlert,
   ShieldCheck,
-  AlertTriangle,
   ChevronRight,
   ChevronDown,
   Tag,
@@ -544,17 +543,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         </span>
                       </span>
 
-                      {/* Brand & Similar Product Advisories Badge */}
-                      {!isMatch &&
-                        ((item.similarProductRecalls?.length || 0) + (item.relatedBrandRecalls?.length || 0) > 0) && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-900 border border-amber-300">
-                            <AlertTriangle className="w-3 h-3 text-amber-600" />
-                            <span>
-                              {(item.similarProductRecalls?.length || 0) + (item.relatedBrandRecalls?.length || 0)} Advisory Notice{((item.similarProductRecalls?.length || 0) + (item.relatedBrandRecalls?.length || 0)) === 1 ? '' : 's'}
-                            </span>
-                          </span>
-                        )}
-
                       {/* 6-Hour Monitor Recall Alert Badge */}
                       {isNewlyRecalled && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-red-600 text-white animate-pulse">
@@ -649,25 +637,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     >
                       <span>View Notice{item.matchedRecalls.length > 1 ? ` (${item.matchedRecalls.length})` : ''}</span>
                       <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  ) : ((item.similarProductRecalls?.length || 0) + (item.relatedBrandRecalls?.length || 0) > 0) ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const first = item.similarProductRecalls?.[0] || item.relatedBrandRecalls?.[0];
-                        if (first) {
-                          onSelectRecall(first);
-                        }
-                      }}
-                      className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
-                      title="View advisory notice for similar products or brand"
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5 text-slate-950" />
-                      <span>
-                        Advisories (
-                        {(item.similarProductRecalls?.length || 0) + (item.relatedBrandRecalls?.length || 0)}
-                        )
-                      </span>
                     </button>
                   ) : null}
                 </div>
