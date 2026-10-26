@@ -167,6 +167,58 @@ export function recordNotifiedRecall(record: NotifiedRecallRecord): void {
 }
 
 /**
+ * Normalizes and extracts product line and variation information.
+ * Variations of the same product (e.g. different sizes, flavors, or batch lots) share the same groupKey.
+ */
+export function getProductVariationGrouping(item: ScanHistoryItem): {
+  groupKey: string;
+  brand: string;
+  baseTitle: string;
+  variationName: string;
+} {
+  const brand = (item.extractedInfo?.brand || '').trim();
+  const rawTitle = (item.identifiedTitle || item.extractedInfo?.productName || 'Product').trim();
+  const flavor = (item.extractedInfo?.flavorOrVariant || '').trim();
+  const size = (item.extractedInfo?.packageSize || '').trim();
+  const model = (item.extractedInfo?.modelOrLot || item.extractedInfo?.modelOrBatchNumber || '').trim();
+
+  // Strip weight/size patterns like "450g", "1.2kg", "500ml", "12 pk"
+  const strippedTitle = rawTitle
+    .replace(/\b\d+(\.\d+)?\s*(g|kg|ml|l|oz|lb|fl\.?\s*oz|pack|pk|ct)\b/gi, '')
+    .trim();
+
+  // If brand is in the title, isolate base product name
+  let baseName = strippedTitle;
+  if (brand && baseName.toLowerCase().startsWith(brand.toLowerCase())) {
+    baseName = baseName.slice(brand.length).replace(/^[\s\-–—:]+/, '').trim();
+  }
+
+  // Remove flavor/variant suffix from base name if present
+  if (flavor && baseName.toLowerCase().includes(flavor.toLowerCase())) {
+    const regex = new RegExp(`\\b${flavor}\\b`, 'gi');
+    const potentialBase = baseName.replace(regex, '').replace(/^[\s\-–—:]+|[\s\-–—:]+$/, '').trim();
+    if (potentialBase.length > 2) {
+      baseName = potentialBase;
+    }
+  }
+
+  const normalizedBrand = brand.toLowerCase();
+  const normalizedBase = (baseName || rawTitle).toLowerCase().replace(/\s+/g, ' ');
+  const groupKey = normalizedBrand ? `${normalizedBrand}::${normalizedBase}` : normalizedBase;
+
+  // Specific variation label (e.g. "Honey Nut • 430g" or "Crunchy")
+  const variationParts = [flavor, size, model].filter(Boolean);
+  const variationName = variationParts.length > 0 ? variationParts.join(' • ') : rawTitle;
+
+  return {
+    groupKey,
+    brand,
+    baseTitle: brand ? `${brand} ${baseName || rawTitle}` : (baseName || rawTitle),
+    variationName
+  };
+}
+
+/**
  * Checks ONLY the items that are present in your scan history against the Canadian safety recall database.
  * Tracks recalls it notified you about in a notification, and never notifies about that item again (only new recalls).
  */
@@ -260,12 +312,65 @@ export async function checkHistoryAgainstRecalls(
     localStorage.setItem(LAST_CHECK_KEY, String(now));
   } catch {}
 
-  // Send system push notification for any brand-new recall notices
+  // Group notifications from different variations of the same product into 1 single notification
   if (newlyRecalledItems.length > 0) {
+    const productGroups = new Map<
+      string,
+      {
+        brand: string;
+        baseTitle: string;
+        variationNames: Set<string>;
+        historyItems: ScanHistoryItem[];
+        recalls: Map<string, RecallItem>;
+      }
+    >();
+
     for (const { historyItem, recall } of newlyRecalledItems) {
-      const title = `🚨 Canada Recall Alert: ${historyItem.identifiedTitle}`;
-      const body = `${recall.Title}\nHazard: ${recall.Issue || 'Check official instructions immediately'}.`;
-      await sendRecallSystemNotification(title, body, recall.URL);
+      const { groupKey, brand, baseTitle, variationName } = getProductVariationGrouping(historyItem);
+      let group = productGroups.get(groupKey);
+      if (!group) {
+        group = {
+          brand,
+          baseTitle,
+          variationNames: new Set(),
+          historyItems: [],
+          recalls: new Map()
+        };
+        productGroups.set(groupKey, group);
+      }
+      group.variationNames.add(variationName);
+      if (!group.historyItems.some((h) => h.id === historyItem.id)) {
+        group.historyItems.push(historyItem);
+      }
+      group.recalls.set(recall.NID, recall);
+    }
+
+    // Send 1 consolidated system notification per product group
+    for (const [, group] of productGroups) {
+      const recallList = Array.from(group.recalls.values());
+      const firstRecall = recallList[0];
+      const variations = Array.from(group.variationNames);
+
+      let title: string;
+      let body: string;
+
+      if (group.historyItems.length > 1 || variations.length > 1) {
+        // Grouped notification for multiple variations of the same product
+        title = `🚨 Canada Recall Alert: ${group.baseTitle} (${variations.length} Variations)`;
+        const varListStr =
+          variations.slice(0, 3).join(', ') + (variations.length > 3 ? ` +${variations.length - 3} more` : '');
+        body = `Recall notices affect your scanned variations (${varListStr}). Hazard: ${
+          firstRecall.Issue || 'Check official instructions immediately'
+        }.`;
+      } else {
+        // Single product variation
+        title = `🚨 Canada Recall Alert: ${group.historyItems[0].identifiedTitle}`;
+        body = `${firstRecall.Title}\nHazard: ${
+          firstRecall.Issue || 'Check official instructions immediately'
+        }.`;
+      }
+
+      await sendRecallSystemNotification(title, body, firstRecall.URL);
     }
 
     // Dispatch global in-app event so UI shows banner/toast

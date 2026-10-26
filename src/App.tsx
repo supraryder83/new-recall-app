@@ -12,7 +12,8 @@ import type { RecallItem, CategoryFilter, DatasetSyncState, ScanHistoryItem } fr
 import { fetchRecallsData, filterRecalls } from './services/recallData';
 import {
   startPeriodicHistoryMonitor,
-  requestRecallNotificationPermission
+  requestRecallNotificationPermission,
+  getProductVariationGrouping
 } from './services/historyMonitor';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -82,6 +83,30 @@ export const App: React.FC = () => {
   const [monitoringAlerts, setMonitoringAlerts] = useState<
     { historyItem: ScanHistoryItem; recall: RecallItem }[]
   >([]);
+
+  // Group monitoring alerts by product line/variations so variations are grouped together
+  const groupedAlertSummary = useMemo(() => {
+    if (monitoringAlerts.length === 0) return [];
+    const groups = new Map<
+      string,
+      { baseTitle: string; variations: string[]; recalls: RecallItem[] }
+    >();
+    for (const { historyItem, recall } of monitoringAlerts) {
+      const { groupKey, baseTitle, variationName } = getProductVariationGrouping(historyItem);
+      let g = groups.get(groupKey);
+      if (!g) {
+        g = { baseTitle, variations: [], recalls: [] };
+        groups.set(groupKey, g);
+      }
+      if (!g.variations.includes(variationName)) {
+        g.variations.push(variationName);
+      }
+      if (!g.recalls.some((r) => r.NID === recall.NID)) {
+        g.recalls.push(recall);
+      }
+    }
+    return Array.from(groups.values());
+  }, [monitoringAlerts]);
 
   // Notification permission state (automatically prompted on site visit)
   const [notificationPermission, setNotificationPermission] = useState<string>(
@@ -203,9 +228,24 @@ export const App: React.FC = () => {
           <Header
             syncState={syncState}
             onRefreshFeed={() => loadData(true)}
-            onOpenScanner={() => setIsScannerOpen(true)}
             canInstallPwa={Boolean(deferredPrompt)}
             onInstallPwa={handleInstallPwa}
+            alertCount={monitoringAlerts.length}
+            onOpenAlerts={() => {
+              if (monitoringAlerts[0]?.recall) {
+                setSelectedRecall(monitoringAlerts[0].recall);
+              } else {
+                setCurrentTab('history');
+              }
+            }}
+            onOpenNotifications={() => {
+              if (notificationPermission === 'default') {
+                handleEnableNotifications();
+              } else {
+                setCurrentTab('history');
+              }
+            }}
+            notificationsGranted={notificationPermission === 'granted'}
           />
         </div>
 
@@ -223,7 +263,46 @@ export const App: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {/* Top Alert Icon (Prominently displayed at top of screen when recalls are detected) */}
+            {monitoringAlerts.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (monitoringAlerts[0]?.recall) {
+                    setSelectedRecall(monitoringAlerts[0].recall);
+                  } else {
+                    setCurrentTab('history');
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm animate-pulse active:scale-95"
+                title={`${monitoringAlerts.length} Canadian recall alert(s) detected in scanned products`}
+              >
+                <AlertTriangle className="w-4 h-4 text-white" />
+                <span>{monitoringAlerts.length} Recall Alert{monitoringAlerts.length > 1 ? 's' : ''}</span>
+              </button>
+            )}
+
+            {/* Top Notification Bell Icon */}
+            <button
+              type="button"
+              onClick={() => {
+                if (notificationPermission === 'default') {
+                  handleEnableNotifications();
+                } else {
+                  setCurrentTab('history');
+                }
+              }}
+              className="relative p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all border border-slate-200/80 active:scale-95 flex items-center gap-1.5 text-xs font-semibold"
+              title="Recall Notifications & 6-Hour Protection"
+              aria-label="Recall Notifications"
+            >
+              <BellRing className="w-4 h-4 text-slate-700" />
+              {notificationPermission === 'granted' && (
+                <span className="w-2 h-2 bg-emerald-500 rounded-full" title="Notifications active" />
+              )}
+            </button>
+
             {/* Direct Scan CTA Button in desktop top bar */}
             <button
               type="button"
@@ -233,12 +312,6 @@ export const App: React.FC = () => {
               <Camera className="w-3.5 h-3.5" />
               <span>AI Recall Scanner</span>
             </button>
-
-            {/* Gemini Vision badge */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Gemini 3.5 Flash Lite</span>
-            </div>
           </div>
         </div>
 
@@ -310,8 +383,10 @@ export const App: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-xs text-red-100 mt-1 line-clamp-2 leading-relaxed">
-                    {monitoringAlerts.length === 1
-                      ? `Your previously scanned item "${monitoringAlerts[0].historyItem.identifiedTitle}" matches an active Canadian safety recall: ${monitoringAlerts[0].recall.Title}`
+                    {groupedAlertSummary && groupedAlertSummary.length === 1
+                      ? groupedAlertSummary[0].variations.length > 1
+                        ? `Active Canadian safety recall detected for ${groupedAlertSummary[0].baseTitle} affecting ${groupedAlertSummary[0].variations.length} scanned variations (${groupedAlertSummary[0].variations.slice(0, 3).join(', ')}).`
+                        : `Your previously scanned item "${monitoringAlerts[0].historyItem.identifiedTitle}" matches an active Canadian safety recall: ${monitoringAlerts[0].recall.Title}`
                       : `${monitoringAlerts.length} products in your permanent scan history match active Canadian safety recalls.`}
                   </p>
                 </div>
@@ -509,7 +584,6 @@ export const App: React.FC = () => {
         <BottomNavBar
           currentTab={currentTab}
           onTabChange={(tab) => setCurrentTab(tab)}
-          onOpenScanner={() => setIsScannerOpen(true)}
         />
 
         {/* MODALS */}

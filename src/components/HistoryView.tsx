@@ -289,7 +289,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                Checks <strong>only the products in your scan history</strong> against Health Canada, CFIA, and Transport Canada safety databases every 6 hours. Recalls you are notified about are tracked to prevent duplicate alerts—only brand new recalls will trigger notifications.
+                Checks <strong>only the products in your scan history</strong> against Health Canada, CFIA, and Transport Canada safety databases every 6 hours. Notifications from different variations of the same product are consolidated into 1 notification and tracked to prevent duplicate alerts.
               </p>
             </div>
           </div>
