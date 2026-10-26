@@ -65,26 +65,34 @@ export function addScanToHistory(
 }
 
 /**
- * Remove an item from the scan history
+ * Update an existing scan in the persistent history log
  */
-export function removeScanFromHistory(id: string): void {
+export function updateScanInHistory(updatedItem: ScanHistoryItem): void {
   const current = getScanHistory();
-  const updated = current.filter((it) => it.id !== id);
+  const index = current.findIndex((it) => it.id === updatedItem.id);
+  if (index === -1) return;
+
+  current[index] = updatedItem;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
   } catch {}
 
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('scan-history-updated'));
+    window.dispatchEvent(new CustomEvent('scan-history-updated', { detail: updatedItem }));
   }
 }
 
 /**
- * Clear all logged scans
+ * Bulk update multiple scans in history
  */
-export function clearScanHistory(): void {
+export function updateMultipleScansInHistory(updatedItems: ScanHistoryItem[]): void {
+  if (!updatedItems || updatedItems.length === 0) return;
+  const current = getScanHistory();
+  const map = new Map(updatedItems.map((it) => [it.id, it]));
+
+  const updated = current.map((it) => (map.has(it.id) ? map.get(it.id)! : it));
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch {}
 
   if (typeof window !== 'undefined') {

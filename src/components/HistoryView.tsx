@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   History,
   Camera,
-  Trash2,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -11,15 +10,28 @@ import {
   Tag,
   ArrowRight,
   Clock,
-  Download
+  Download,
+  Bell,
+  BellRing,
+  RefreshCw,
+  CheckCircle2,
+  Shield
 } from 'lucide-react';
 import type { RecallItem, ScanHistoryItem } from '../types/recall';
-import { getScanHistory, removeScanFromHistory, clearScanHistory } from '../services/scanHistory';
+import { getScanHistory } from '../services/scanHistory';
+import {
+  checkHistoryAgainstRecalls,
+  getLastHistoryCheckTime,
+  getNextHistoryCheckTime,
+  hasNotificationPermission,
+  requestRecallNotificationPermission
+} from '../services/historyMonitor';
 
 interface HistoryViewProps {
   onOpenScanner: () => void;
   onApplySearchQuery: (query: string) => void;
   onSelectRecall: (recall: RecallItem) => void;
+  recallsDataset?: RecallItem[];
 }
 
 function formatTimestamp(timestamp: number): string {
@@ -64,7 +76,8 @@ function exportHistoryToCSV(items: ScanHistoryItem[]): void {
     'Recall Verdict',
     'Matched Recalls Count',
     'Match Reason',
-    'Search Keywords'
+    'Search Keywords',
+    'Last Verified At'
   ];
 
   const escapeCSV = (value: string | number | undefined | null) => {
@@ -87,6 +100,7 @@ function exportHistoryToCSV(items: ScanHistoryItem[]): void {
         : item.verdict === 'POSSIBLE_MATCH'
           ? 'POSSIBLE MATCH'
           : 'SAFE (NO RECALL DETECTED)';
+    const lastCheckedStr = item.lastCheckedAt ? new Date(item.lastCheckedAt).toLocaleString() : 'Pending';
 
     return [
       escapeCSV(item.id),
@@ -101,7 +115,8 @@ function exportHistoryToCSV(items: ScanHistoryItem[]): void {
       escapeCSV(verdictLabel),
       escapeCSV(item.matchedRecallsCount || 0),
       escapeCSV(item.matchReason || ''),
-      escapeCSV(item.searchKeywords || '')
+      escapeCSV(item.searchKeywords || ''),
+      escapeCSV(lastCheckedStr)
     ].join(',');
   });
 
@@ -122,37 +137,82 @@ function exportHistoryToCSV(items: ScanHistoryItem[]): void {
 export const HistoryView: React.FC<HistoryViewProps> = ({
   onOpenScanner,
   onApplySearchQuery,
-  onSelectRecall
+  onSelectRecall,
+  recallsDataset = []
 }) => {
   const [historyItems, setHistoryItems] = useState<ScanHistoryItem[]>([]);
+  const [lastCheckTime, setLastCheckTime] = useState<number | null>(null);
+  const [nextCheckTime, setNextCheckTime] = useState<number>(Date.now());
+  const [isVerifyingNow, setIsVerifyingNow] = useState(false);
+  const [verificationFeedback, setVerificationFeedback] = useState<string | null>(null);
+  const [notificationsGranted, setNotificationsGranted] = useState(false);
 
-  // Load history & listen for updates
+  // Load history, check timestamps & notification permissions
   useEffect(() => {
     const load = () => {
       setHistoryItems(getScanHistory());
+      setLastCheckTime(getLastHistoryCheckTime());
+      setNextCheckTime(getNextHistoryCheckTime());
+      setNotificationsGranted(hasNotificationPermission());
     };
     load();
 
     const handleUpdate = () => load();
     window.addEventListener('scan-history-updated', handleUpdate);
+    window.addEventListener('recall-monitoring-check-completed', handleUpdate);
+
     return () => {
       window.removeEventListener('scan-history-updated', handleUpdate);
+      window.removeEventListener('recall-monitoring-check-completed', handleUpdate);
     };
   }, []);
 
-  const handleDeleteItem = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    removeScanFromHistory(id);
+  const handleExport = () => {
+    exportHistoryToCSV(historyItems);
   };
 
-  const handleClearAll = () => {
-    if (window.confirm('Are you sure you want to clear your entire scan history? This action cannot be undone.')) {
-      clearScanHistory();
+  const handleRequestNotifications = async () => {
+    const result = await requestRecallNotificationPermission();
+    setNotificationsGranted(result === 'granted');
+    if (result === 'granted') {
+      setVerificationFeedback('System notifications enabled! You will be alerted whenever a scanned item is recalled.');
+      setTimeout(() => setVerificationFeedback(null), 5000);
     }
   };
 
-  const handleExport = () => {
-    exportHistoryToCSV(historyItems);
+  const handleVerifyNow = async () => {
+    if (!recallsDataset || recallsDataset.length === 0) {
+      setVerificationFeedback('Canadian recall database is syncing. Please wait a moment...');
+      setTimeout(() => setVerificationFeedback(null), 4000);
+      return;
+    }
+
+    setIsVerifyingNow(true);
+    setVerificationFeedback(null);
+    try {
+      const result = await checkHistoryAgainstRecalls(recallsDataset, true);
+      setLastCheckTime(result.timestamp);
+      setNextCheckTime(getNextHistoryCheckTime());
+      setHistoryItems(getScanHistory());
+
+      if (result.newlyRecalledCount > 0) {
+        setVerificationFeedback(
+          `⚠️ Safety check completed: ${result.newlyRecalledCount} product(s) flagged with active Canadian recalls!`
+        );
+      } else {
+        setVerificationFeedback(
+          `✅ 6-Hour verification complete: All ${result.checkedCount} scanned products checked against ${recallsDataset.length.toLocaleString()} Canadian recall notices. No new recalls detected.`
+        );
+      }
+    } catch (err) {
+      console.error('Manual history verification error:', err);
+      setVerificationFeedback('Failed to complete recall verification. Please try again.');
+    } finally {
+      setIsVerifyingNow(false);
+      setTimeout(() => {
+        setVerificationFeedback(null);
+      }, 7000);
+    }
   };
 
   const totalScans = historyItems.length;
@@ -173,35 +233,21 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-slate-500">
-            Log of photographed items and Canadian recall verification results
+            Permanent safety log & continuous 6-hour Canadian recall monitoring
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
           {totalScans > 0 && (
-            <>
-              {/* Save as CSV */}
-              <button
-                type="button"
-                onClick={handleExport}
-                className="px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all border border-slate-200/80 flex items-center gap-1.5 shadow-2xs active:scale-95"
-                title="Download scan history as CSV file"
-              >
-                <Download className="w-4 h-4 text-slate-600" />
-                <span>Save as CSV</span>
-              </button>
-
-              {/* Clear History */}
-              <button
-                type="button"
-                onClick={handleClearAll}
-                className="px-3.5 py-2.5 text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-xl transition-all border border-red-200/80 flex items-center gap-1.5 shadow-2xs active:scale-95"
-                title="Clear entire scan history"
-              >
-                <Trash2 className="w-4 h-4 text-red-600" />
-                <span>Clear History</span>
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={handleExport}
+              className="px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all border border-slate-200/80 flex items-center gap-1.5 shadow-2xs active:scale-95"
+              title="Download scan history as CSV file"
+            >
+              <Download className="w-4 h-4 text-slate-600" />
+              <span>Save as CSV</span>
+            </button>
           )}
 
           <button
@@ -215,12 +261,107 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
       </div>
 
+      {/* 6-Hour Safety Verification & Notification Monitor Card */}
+      <div className="bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-slate-800 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-red-500/20 text-red-400 rounded-2xl border border-red-500/30 shrink-0 mt-0.5">
+              <Shield className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-extrabold text-base sm:text-lg text-white">
+                  6-Hour Safety Recall Monitor
+                </h3>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Active (Every 6h)
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                All photographed items in your history are automatically audited every 6 hours against Health Canada, CFIA, and Transport Canada safety databases. If an item you scanned is recalled in the future, you will receive an immediate notification.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-center">
+            {/* Notification Permission Toggle */}
+            {notificationsGranted ? (
+              <span className="px-3 py-2 bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+                <BellRing className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Alerts On</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleRequestNotifications}
+                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                title="Enable browser notifications for recall alerts"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>Enable Alerts</span>
+              </button>
+            )}
+
+            {/* Manual Check Now Button */}
+            <button
+              type="button"
+              onClick={handleVerifyNow}
+              disabled={isVerifyingNow || totalScans === 0}
+              className="px-3.5 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all border border-white/20 flex items-center gap-1.5 active:scale-95"
+              title="Run on-demand check against latest Canadian recall records"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isVerifyingNow ? 'animate-spin text-red-400' : ''}`} />
+              <span>{isVerifyingNow ? 'Verifying...' : 'Verify Now'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Verification Status Details & Timestamps */}
+        <div className="pt-2 border-t border-slate-700/60 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Last Checked:</span>
+              <strong className="text-slate-200">
+                {lastCheckTime ? formatTimestamp(lastCheckTime) : 'Checking on schedule'}
+              </strong>
+            </span>
+
+            <span className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              <span>Next Check:</span>
+              <strong className="text-slate-200">
+                {nextCheckTime ? (
+                  Date.now() >= nextCheckTime
+                    ? 'Due now'
+                    : `In ~${Math.max(1, Math.round((nextCheckTime - Date.now()) / (1000 * 60 * 60)))}h`
+                ) : (
+                  'Every 6 hours'
+                )}
+              </strong>
+            </span>
+          </div>
+
+          <span className="text-[11px] text-slate-400 italic">
+            Scan history is permanently protected and never cleared
+          </span>
+        </div>
+
+        {/* On-demand Feedback Banner */}
+        {verificationFeedback && (
+          <div className="p-3 bg-white/10 border border-white/20 rounded-xl text-xs text-white animate-in fade-in">
+            {verificationFeedback}
+          </div>
+        )}
+      </div>
+
       {/* Summary KPI Badges */}
       {totalScans > 0 && (
         <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
           <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-              Total Scans
+              Permanent Scans
             </span>
             <span className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-0.5 block">
               {totalScans}
@@ -256,7 +397,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <div className="max-w-md mx-auto space-y-1.5">
             <h3 className="font-extrabold text-lg text-slate-900">No Product Scans Yet</h3>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              When you snap a photo of any grocery item, household product, or vehicle part, Gemini will identify it, check for active Canadian recalls, and save your scan here.
+              When you snap a photo of any grocery item, household product, or vehicle part, Gemini will identify it, check for active Canadian recalls, and save it to your permanent safety log for continuous 6-hour monitoring.
             </p>
           </div>
           <button
@@ -276,34 +417,31 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Recorded Scans ({totalScans})
             </span>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleExport}
-                className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 hover:underline"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export CSV</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleClearAll}
-                className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 hover:underline"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Clear All</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleExport}
+              className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 hover:underline"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export CSV</span>
+            </button>
           </div>
 
           {historyItems.map((item) => {
             const isMatch = item.verdict === 'MATCH_FOUND';
             const isPossible = item.verdict === 'POSSIBLE_MATCH';
+            const isNewlyRecalled = item.isNewlyRecalled === true;
 
             return (
               <div
                 key={item.id}
-                className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 hover:border-slate-300 shadow-xs transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group"
+                className={`bg-white rounded-2xl p-4 sm:p-5 border shadow-xs transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group ${
+                  isNewlyRecalled
+                    ? 'border-red-400 ring-2 ring-red-500/20 bg-red-50/20'
+                    : isMatch
+                      ? 'border-red-200 hover:border-red-300'
+                      : 'border-slate-200/80 hover:border-slate-300'
+                }`}
               >
                 {/* Left Section: Thumbnail & Identifiers */}
                 <div className="flex items-start gap-3.5 min-w-0 flex-1">
@@ -352,6 +490,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         </span>
                       </span>
 
+                      {/* 6-Hour Monitor Recall Alert Badge */}
+                      {isNewlyRecalled && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-red-600 text-white animate-pulse">
+                          <span>🚨 Recalled After Scan</span>
+                        </span>
+                      )}
+
                       {/* Extracted Category */}
                       {item.extractedInfo?.category && (
                         <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
@@ -389,6 +534,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         Batch/Model: {item.extractedInfo.modelOrLot || item.extractedInfo.modelOrBatchNumber}
                       </span>
                     )}
+
+                    {/* 6-Hour Verification Status Timestamp */}
+                    <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400">
+                      <span className="inline-flex items-center gap-1 text-slate-500">
+                        <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                        <span>Protected by 6h monitor</span>
+                      </span>
+                      {item.lastCheckedAt && (
+                        <span>• Verified {formatTimestamp(item.lastCheckedAt)}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -422,15 +578,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   )}
-
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteItem(item.id, e)}
-                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                    title="Remove from history"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
             );

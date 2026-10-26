@@ -70,4 +70,6 @@ export interface ScanHistoryItem {
   extractedInfo?: GeminiExtractionResult;
   matchedRecalls?: RecallItem[];
   searchKeywords?: string;
+  lastCheckedAt?: number;
+  isNewlyRecalled?: boolean;
 }

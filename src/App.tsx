@@ -7,8 +7,9 @@ import {
   Sparkles,
   Camera
 } from 'lucide-react';
-import type { RecallItem, CategoryFilter, DatasetSyncState } from './types/recall';
+import type { RecallItem, CategoryFilter, DatasetSyncState, ScanHistoryItem } from './types/recall';
 import { fetchRecallsData, filterRecalls } from './services/recallData';
+import { startPeriodicHistoryMonitor } from './services/historyMonitor';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { SearchAndFilters } from './components/SearchAndFilters';
@@ -73,6 +74,11 @@ export const App: React.FC = () => {
     }
   };
 
+  // Safety monitoring recall alerts (detected in scan history by 6-hour check)
+  const [monitoringAlerts, setMonitoringAlerts] = useState<
+    { historyItem: ScanHistoryItem; recall: RecallItem }[]
+  >([]);
+
   // Instant Load & Background Sync
   const loadData = useCallback(async (forceRefresh = false) => {
     setSyncState((prev) => ({ ...prev, status: 'loading', errorMessage: undefined }));
@@ -98,6 +104,29 @@ export const App: React.FC = () => {
   useEffect(() => {
     loadData(false);
   }, [loadData]);
+
+  // Start periodic 6-hour background safety verification against Canadian safety recalls
+  useEffect(() => {
+    if (allRecalls.length === 0) return;
+
+    // Start 6-hour monitor
+    const cleanup = startPeriodicHistoryMonitor(() => allRecalls);
+
+    // Listen for recall alerts triggered by 6-hour verification
+    const handleRecallAlert = (e: any) => {
+      const items = e.detail?.newlyRecalledItems;
+      if (Array.isArray(items) && items.length > 0) {
+        setMonitoringAlerts((prev) => [...items, ...prev]);
+      }
+    };
+
+    window.addEventListener('recall-monitoring-alert', handleRecallAlert);
+
+    return () => {
+      cleanup();
+      window.removeEventListener('recall-monitoring-alert', handleRecallAlert);
+    };
+  }, [allRecalls]);
 
   // Reset pagination when query or category changes
   useEffect(() => {
@@ -187,6 +216,60 @@ export const App: React.FC = () => {
               onInstall={handleInstallPwa}
               onDismiss={() => setShowInstallBanner(false)}
             />
+          )}
+
+          {/* Urgent 6-Hour Safety Recall Alert Banner */}
+          {monitoringAlerts.length > 0 && (
+            <div className="bg-red-600 text-white p-4 sm:p-5 rounded-3xl shadow-lg border border-red-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top duration-300">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="p-2.5 bg-white/20 rounded-2xl shrink-0 mt-0.5">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-extrabold text-sm sm:text-base">
+                      🚨 Safety Recall Alert: Scanned Product Recalled!
+                    </h4>
+                    <span className="text-[10px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      6-Hour Monitor
+                    </span>
+                  </div>
+                  <p className="text-xs text-red-100 mt-1 line-clamp-2 leading-relaxed">
+                    {monitoringAlerts.length === 1
+                      ? `Your previously scanned item "${monitoringAlerts[0].historyItem.identifiedTitle}" matches an active Canadian safety recall: ${monitoringAlerts[0].recall.Title}`
+                      : `${monitoringAlerts.length} products in your permanent scan history match active Canadian safety recalls.`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedRecall(monitoringAlerts[0].recall);
+                  }}
+                  className="px-3.5 py-2 bg-white text-red-700 hover:bg-red-50 text-xs font-bold rounded-xl transition-all shadow-xs"
+                >
+                  View Notice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentTab('history');
+                  }}
+                  className="px-3.5 py-2 bg-red-700 hover:bg-red-800 text-white text-xs font-bold rounded-xl transition-all border border-red-500/40"
+                >
+                  View History
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonitoringAlerts([])}
+                  className="p-1.5 text-red-200 hover:text-white rounded-lg transition-colors"
+                  title="Dismiss alert"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Non-blocking background sync toast */}
@@ -326,6 +409,7 @@ export const App: React.FC = () => {
           {/* TAB 3: SCAN HISTORY */}
           {currentTab === 'history' && (
             <HistoryView
+              recallsDataset={allRecalls}
               onOpenScanner={() => setIsScannerOpen(true)}
               onApplySearchQuery={(query) => {
                 setSearchQuery(query);
