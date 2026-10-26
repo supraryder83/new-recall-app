@@ -952,7 +952,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
           <div className="flex items-start gap-2.5">
             <Key className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
             <div>
-              <h5 className="font-bold text-xs text-white">Gemini Vision Key Needed</h5>
+              <h5 className="font-bold text-xs text-white">Gemini 3.5 Flash Lite Key Needed</h5>
               <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
                 To identify unboxed items by photo without a barcode, enter your Gemini API key:
               </p>

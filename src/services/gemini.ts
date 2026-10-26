@@ -2,6 +2,11 @@ import { GoogleGenAI } from '@google/genai';
 import type { GeminiExtractionResult, RecallItem, ScanMatchResult } from '../types/recall';
 import { findRecallsByCodeOrQuery } from './recallData';
 
+/**
+ * Primary model used for AI visual product, serial number, and packaging recognition
+ */
+export const GEMINI_VISION_MODEL = 'gemini-3.5-flash-lite';
+
 export function getGeminiApiKey(): string {
   // Support both VITE_ and non-prefixed GEMINI_ / GOOGLE_ env variables
   const envKey =
@@ -131,7 +136,7 @@ Important:
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
+      model: GEMINI_VISION_MODEL,
       contents: [
         {
           role: 'user',
@@ -251,7 +256,7 @@ Return ONLY a valid JSON object with:
 }`;
 
     const res = await ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
+      model: GEMINI_VISION_MODEL,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: { responseMimeType: 'application/json', temperature: 0.1 }
     });

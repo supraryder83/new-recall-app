@@ -123,8 +123,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-            <span>Engine: <strong className="text-slate-700">AI Vision Recognition</strong></span>
-            <span className="text-emerald-600 font-semibold">Enabled</span>
+            <span>Model: <strong className="text-slate-700">Gemini 3.5 Flash Lite</strong></span>
+            <span className="text-emerald-600 font-semibold">Active</span>
           </div>
         </div>
       </div>
