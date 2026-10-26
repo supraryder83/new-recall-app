@@ -85,7 +85,7 @@ export interface AnalyzeImageOptions {
 }
 
 /**
- * Send product image to Gemini 2.5 Flash to extract identifiers and cross reference recalls
+ * Send product image to Gemini 2 Flash Lite to extract identifiers and cross reference recalls
  */
 export async function analyzeProductImageWithGemini({
   base64Data,
@@ -131,7 +131,7 @@ Important:
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.0-flash-lite',
       contents: [
         {
           role: 'user',
@@ -251,7 +251,7 @@ Return ONLY a valid JSON object with:
 }`;
 
     const res = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.0-flash-lite',
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: { responseMimeType: 'application/json', temperature: 0.1 }
     });

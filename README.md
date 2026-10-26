@@ -1,6 +1,6 @@
 # Canada Recall Alert (Alerte Rappel Canada) 🇨🇦
 
-A progressive web app (PWA) built with **React**, **Vite**, **Tailwind CSS**, and **Lucide Icons** that tracks product, vehicle, medical, and food safety recalls across Canada in real-time. Features instant client-side IndexedDB caching, camera barcode scanning, and multimodal AI recognition powered by **Google Gemini 2.5 Flash** (`@google/genai`).
+A progressive web app (PWA) built with **React**, **Vite**, **Tailwind CSS**, and **Lucide Icons** that tracks product, vehicle, medical, and food safety recalls across Canada in real-time. Features instant client-side IndexedDB caching, camera barcode scanning, and multimodal AI recognition powered by **Google Gemini 2 Flash Lite** (`@google/genai`).
 
 ---
 
@@ -50,7 +50,7 @@ The application provides a tailored user experience depending on device viewport
   - Direct camera access via standard browser `navigator.mediaDevices.getUserMedia`.
   - Native `BarcodeDetector` API for UPC-A, EAN-13, EAN-8, and Code 128 barcodes.
   - Automatic instant querying against the Canadian recall dataset with haptic feedback and celebratory confetti on safe scans.
-- **✨ Multimodal Gemini 2.5 Flash Vision Inspector**:
+- **✨ Multimodal Gemini 2 Flash Lite Vision Inspector**:
   - Snap photos or upload images of grocery labels, appliance stickers, or vehicle VIN plates.
   - Structured extraction of `brand`, `productName`, `modelOrBatchNumber`, and `detectedCategory` using `@google/genai`.
   - Instant cross-referencing against the full Canadian safety database returning an official verdict card (*"Potential Recall Detected!"* vs. *"No Active Recall Detected in Dataset"*).

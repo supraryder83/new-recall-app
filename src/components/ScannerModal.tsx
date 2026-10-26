@@ -396,7 +396,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
     setScanResult(null);
 
     try {
-      setAnalysisStep('Sending photo to Gemini 2.5 Flash...');
+      setAnalysisStep('Sending photo to Gemini 2 Flash Lite...');
       await new Promise((r) => setTimeout(r, 250));
       setAnalysisStep('Identifying product brand, model & packaging details...');
 
@@ -535,7 +535,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
             <span>{facingMode === 'environment' ? 'Rear Camera' : 'Front Camera'}</span>
           </span>
           <span className="hidden sm:inline-flex text-[11px] font-semibold text-amber-300 bg-amber-500/20 border border-amber-400/30 px-2.5 py-1 rounded-full backdrop-blur-md">
-            Gemini 2.5 AI
+            Gemini 2 Flash Lite
           </span>
         </div>
 
