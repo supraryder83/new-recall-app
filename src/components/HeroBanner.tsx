@@ -37,7 +37,12 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         {/* Subtitle */}
         <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal">
           Instant safety alerts directly from Health Canada, CFIA, and Transport Canada. Snap a photo
-          of any product packaging with <strong>Gemini 3.5 Flash Lite AI</strong> to identify it and cross-reference safety hazards immediately.
+          of any product packaging, barcode, or serial number with <strong>AI Vision Recognition</strong> to identify it and cross-reference safety hazards immediately.
+        </p>
+
+        {/* Disclaimer Note */}
+        <p className="text-[11px] text-slate-400 font-medium">
+          Disclaimer: Independent safety resource. Not endorsed by, affiliated with, or sponsored by Health Canada, CFIA, or the Government of Canada.
         </p>
 
         {/* CTA Buttons */}

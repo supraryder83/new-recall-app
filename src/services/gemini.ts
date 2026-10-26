@@ -94,7 +94,7 @@ export async function analyzeProductImageWithGemini({
 }: AnalyzeImageOptions): Promise<ScanMatchResult> {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
-    throw new Error('Gemini API key is missing. Please ensure VITE_GEMINI_API_KEY is configured in your .env file.');
+    throw new Error('API key is missing. Please ensure your API key is configured in settings or .env file.');
   }
 
   // Strip data:image/...;base64, prefix if present
@@ -159,8 +159,8 @@ Important:
       const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
       parsed = JSON.parse(cleanJson);
     } catch (parseErr) {
-      console.error('Failed to parse Gemini JSON output:', parseErr, rawText);
-      throw new Error('Failed to interpret Gemini recognition response. Please try again with a clearer photo.');
+      console.error('Failed to parse AI recognition JSON output:', parseErr, rawText);
+      throw new Error('Failed to interpret recognition response. Please try again with a clear photo of the barcode or serial number.');
     }
 
     const extraction: GeminiExtractionResult = {
@@ -181,11 +181,11 @@ Important:
     // Cross-reference extracted details against the Canadian recall dataset with forensic scoring
     return crossReferenceRecallDataset(extraction, recallsDataset);
   } catch (err: any) {
-    console.error('Gemini vision analysis error:', err);
+    console.error('Vision analysis error:', err);
     if (err?.message?.includes('API_KEY_INVALID') || err?.status === 400 || err?.status === 403) {
-      throw new Error('Invalid Gemini API Key. Please verify the key in your .env file.');
+      throw new Error('Invalid API Key. Please verify your configured key in settings.');
     }
-    throw new Error(err?.message || 'Error processing image with Gemini.');
+    throw new Error(err?.message || 'Error processing product image.');
   }
 }
 

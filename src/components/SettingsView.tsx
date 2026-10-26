@@ -123,7 +123,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-            <span>Engine: <strong className="text-slate-700">Gemini 3.5 Flash Lite</strong></span>
+            <span>Engine: <strong className="text-slate-700">AI Vision Recognition</strong></span>
             <span className="text-emerald-600 font-semibold">Enabled</span>
           </div>
         </div>
@@ -159,15 +159,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           Notices are provided directly by Health Canada, Canadian Food Inspection Agency (CFIA), and
           Transport Canada under the Open Government Licence – Canada.
         </p>
-        <a
-          href="https://recalls-rappels.canada.ca/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-red-600 font-bold hover:underline inline-flex items-center gap-1 pt-1"
-        >
-          <span>recalls-rappels.canada.ca</span>
-          <ExternalLink className="w-3 h-3" />
-        </a>
+        <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+          <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-xl text-[11px] text-slate-600 leading-relaxed">
+            <strong className="text-slate-800">Non-Endorsement Disclaimer:</strong> This application is an independent public safety utility. It is not endorsed by, sponsored by, or affiliated with Health Canada, CFIA, Transport Canada, or the Government of Canada.
+          </div>
+          <a
+            href="https://recalls-rappels.canada.ca/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-red-600 font-bold hover:underline inline-flex items-center gap-1 self-start"
+          >
+            <span>Visit Official Recalls Portal (Canada.ca)</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
       </div>
     </div>
   );

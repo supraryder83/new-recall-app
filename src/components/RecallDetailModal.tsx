@@ -182,6 +182,11 @@ export const RecallDetailModal: React.FC<RecallDetailModalProps> = ({ recall, is
               </p>
             </div>
           )}
+
+          {/* Non-Endorsement Disclaimer */}
+          <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-xl text-[10px] text-slate-500 leading-relaxed text-left">
+            <strong>Disclaimer:</strong> This application is an independent safety search tool and is not endorsed by, sponsored by, or affiliated with Health Canada, CFIA, Transport Canada, or the Government of Canada.
+          </div>
         </div>
 
         {/* Bottom Actions */}

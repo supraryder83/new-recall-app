@@ -580,6 +580,16 @@ export const App: React.FC = () => {
           )}
         </main>
 
+        {/* APP FOOTER WITH NON-ENDORSEMENT DISCLAIMER */}
+        <footer className="mt-auto py-8 px-5 border-t border-slate-200/80 bg-white/50 text-center text-xs text-slate-500 space-y-2 pb-24 md:pb-8">
+          <p className="font-bold text-slate-700">
+            Canada Recall Safety Registry & Product Verification
+          </p>
+          <p className="text-[11px] text-slate-400 max-w-xl mx-auto leading-relaxed">
+            <strong>Disclaimer:</strong> This application is an independent consumer safety reference tool. It is not endorsed by, sponsored by, or affiliated with Health Canada, the Canadian Food Inspection Agency (CFIA), Transport Canada, or the Government of Canada. Public safety recall records are retrieved under Canada's Open Government Licence.
+          </p>
+        </footer>
+
         {/* MOBILE BOTTOM NAVIGATION BAR (Hidden on md and above) */}
         <BottomNavBar
           currentTab={currentTab}

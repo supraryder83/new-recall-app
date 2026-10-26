@@ -5,6 +5,7 @@ import {
   Sparkles,
   ShieldAlert,
   ShieldCheck,
+  Shield,
   RefreshCw,
   AlertTriangle,
   SwitchCamera,
@@ -15,7 +16,8 @@ import {
   Tag,
   ExternalLink,
   Calendar,
-  FileText
+  FileText,
+  Barcode
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { RecallItem, ScanMatchResult } from '../types/recall';
@@ -377,7 +379,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
     if (!file) return;
     stopCamera();
     setAnalyzingPhoto(true);
-    setAnalysisStep('Optimizing photo for Gemini AI...');
+    setAnalysisStep('Optimizing photo for AI recognition...');
     setVisionError(null);
 
     try {
@@ -397,7 +399,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
     setScanResult(null);
 
     try {
-      setAnalysisStep('Sending photo to Gemini 3.5 Flash Lite...');
+      setAnalysisStep('Scanning photo for barcode, serial numbers & product details...');
       await new Promise((r) => setTimeout(r, 250));
       setAnalysisStep('Identifying product brand, model & packaging details...');
 
@@ -449,8 +451,8 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
         });
       }
     } catch (err: any) {
-      console.error('Gemini vision analysis failed:', err);
-      setVisionError(err?.message || 'Failed to analyze photo with Gemini.');
+      console.error('Vision analysis failed:', err);
+      setVisionError(err?.message || 'Failed to analyze photo. Please try again with a clear photo of the barcode or label.');
     } finally {
       setAnalyzingPhoto(false);
       setAnalysisStep('');
@@ -552,8 +554,8 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
             <Camera className="w-3.5 h-3.5 text-red-500" />
             <span>{facingMode === 'environment' ? 'Rear Camera' : 'Front Camera'}</span>
           </span>
-          <span className="hidden sm:inline-flex text-[11px] font-semibold text-amber-300 bg-amber-500/20 border border-amber-400/30 px-2.5 py-1 rounded-full backdrop-blur-md">
-            Gemini 3.5 Flash Lite
+          <span className="hidden sm:inline-flex text-[11px] font-semibold text-emerald-300 bg-emerald-500/20 border border-emerald-400/30 px-2.5 py-1 rounded-full backdrop-blur-md">
+            AI Vision Scanner
           </span>
         </div>
 
@@ -596,15 +598,51 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
         </div>
       </div>
 
+      {/* BARCODE / SERIAL NUMBER ACCURACY BANNER */}
+      {!scanResult && cameraActive && (
+        <div className="absolute top-18 inset-x-4 max-w-sm mx-auto z-30 p-2.5 bg-black/85 backdrop-blur-md border border-amber-400/40 rounded-2xl shadow-xl text-center animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center justify-center gap-1.5 text-amber-400 font-extrabold text-[11px] uppercase tracking-wider">
+            <Barcode className="w-3.5 h-3.5" />
+            <span>For More Accurate Results</span>
+          </div>
+          <p className="text-xs text-white font-medium mt-0.5 leading-snug">
+            Take a photo of the <strong className="text-amber-300">barcode</strong> or <strong className="text-amber-300">serial number</strong> on the product to get an exact match.
+          </p>
+        </div>
+      )}
+
+      {/* CAMERA RETICLE TARGET */}
+      {!scanResult && cameraActive && (
+        <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center z-20 px-6">
+          <div className="w-72 h-44 sm:w-80 sm:h-48 border-2 border-dashed border-white/40 rounded-2xl relative flex flex-col items-center justify-between p-3.5 bg-black/10">
+            {/* Corner Brackets */}
+            <div className="absolute -top-1 -left-1 w-6 h-6 border-t-3 border-l-3 border-red-500 rounded-tl-xl" />
+            <div className="absolute -top-1 -right-1 w-6 h-6 border-t-3 border-r-3 border-red-500 rounded-tr-xl" />
+            <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-3 border-l-3 border-red-500 rounded-bl-xl" />
+            <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-3 border-r-3 border-red-500 rounded-br-xl" />
+
+            {/* Reticle Badge */}
+            <span className="text-[10px] font-bold text-white/95 bg-black/70 px-2.5 py-1 rounded-full backdrop-blur-xs flex items-center gap-1.5 shadow-sm">
+              <Barcode className="w-3.5 h-3.5 text-amber-400" />
+              <span>Center Barcode or Serial / Model #</span>
+            </span>
+
+            <span className="text-[10px] text-slate-300 font-medium bg-black/60 px-2.5 py-0.5 rounded-full">
+              Hold steady & keep well-lit
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* API Key Missing Banner (Floating if needed) */}
       {!hasKey && (
         <div className="absolute top-20 inset-x-4 max-w-md mx-auto z-30 p-4 bg-slate-900/90 border border-amber-400/40 rounded-2xl text-left backdrop-blur-md shadow-2xl text-white space-y-2">
           <div className="flex items-start gap-2.5">
             <Key className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
             <div>
-              <h5 className="font-bold text-xs text-white">Gemini API Key Needed</h5>
+              <h5 className="font-bold text-xs text-white">Vision API Key Needed</h5>
               <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
-                Configure <code className="font-mono text-amber-300">VITE_GEMINI_API_KEY</code> in <code className="font-mono">.env</code> or paste your key:
+                Configure <code className="font-mono text-amber-300">VITE_API_KEY</code> in <code className="font-mono">.env</code> or paste your key:
               </p>
             </div>
           </div>
@@ -624,7 +662,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
                 type="password"
                 value={quickApiKey}
                 onChange={(e) => setQuickApiKey(e.target.value)}
-                placeholder="Paste Gemini API key (AIzaSy...)"
+                placeholder="Paste API key..."
                 className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-2 focus:ring-red-500"
               />
               <div className="flex gap-2">
@@ -655,10 +693,10 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
             <Sparkles className="w-10 h-10 text-white animate-spin" />
           </div>
           <h3 className="text-lg font-extrabold text-white tracking-tight">
-            Analyzing Product with Gemini AI...
+            Analyzing Product with AI Scanner...
           </h3>
           <p className="text-xs text-slate-300 mt-1.5 max-w-xs font-medium animate-pulse">
-            {analysisStep || 'Inspecting brand, product name, and packaging...'}
+            {analysisStep || 'Inspecting brand, product name, barcode, and packaging...'}
           </p>
         </div>
       )}
@@ -680,82 +718,95 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
 
       {/* BOTTOM CONTROLS BAR (Full-Screen Camera Shutter) */}
       {!scanResult && (
-        <div className="absolute bottom-0 inset-x-0 z-30 pb-safe px-6 py-6 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-center justify-around pointer-events-auto">
-          {/* Gallery Upload Button */}
-          <div className="flex flex-col items-center">
-            <input
-              type="file"
-              id="fullscreen-gallery-upload"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleVisionImageFile(file);
-                e.target.value = '';
-              }}
-            />
-            <label
-              htmlFor="fullscreen-gallery-upload"
-              onClick={() => stopCamera()}
-              className="w-13 h-13 rounded-full bg-white/15 hover:bg-white/25 border border-white/25 backdrop-blur-md flex items-center justify-center cursor-pointer transition-all active:scale-90 shadow-lg text-white"
-              title="Upload photo from device gallery"
-            >
-              <Upload className="w-5 h-5" />
-            </label>
-            <span className="text-[10px] font-semibold text-white/90 mt-1">Gallery</span>
+        <div className="absolute bottom-0 inset-x-0 z-30 pb-safe px-6 pt-3 pb-5 bg-gradient-to-t from-black/95 via-black/70 to-transparent flex flex-col items-center gap-2.5 pointer-events-auto">
+          {/* Barcode & Serial prompt badge */}
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-200 bg-black/60 px-3 py-1 rounded-full backdrop-blur-md border border-white/15">
+            <Barcode className="w-3.5 h-3.5 text-amber-400" />
+            <span>Photograph barcode or serial number for exact match</span>
           </div>
 
-          {/* PRIMARY CAMERA SHUTTER BUTTON (Large Circular Shutter) */}
-          <div className="flex flex-col items-center">
-            {cameraActive ? (
-              <button
-                type="button"
-                onClick={handleSnapLivePhoto}
-                disabled={analyzingPhoto}
-                className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center p-1 shadow-[0_0_30px_rgba(255,255,255,0.4)] active:scale-90 transition-transform disabled:opacity-50"
-                title="Take Photo and Check Recalls"
+          <div className="w-full flex items-center justify-around">
+            {/* Gallery Upload Button */}
+            <div className="flex flex-col items-center">
+              <input
+                type="file"
+                id="fullscreen-gallery-upload"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleVisionImageFile(file);
+                  e.target.value = '';
+                }}
+              />
+              <label
+                htmlFor="fullscreen-gallery-upload"
+                onClick={() => stopCamera()}
+                className="w-13 h-13 rounded-full bg-white/15 hover:bg-white/25 border border-white/25 backdrop-blur-md flex items-center justify-center cursor-pointer transition-all active:scale-90 shadow-lg text-white"
+                title="Upload photo of barcode, serial number or product"
               >
-                <div className="w-full h-full rounded-full bg-white hover:bg-red-500 transition-colors shadow-inner" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => startCamera(undefined, facingMode)}
-                className="w-18 h-18 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-xl active:scale-95 transition-all"
-                title="Resume Camera"
+                <Upload className="w-5 h-5" />
+              </label>
+              <span className="text-[10px] font-semibold text-white/90 mt-1">Gallery</span>
+            </div>
+
+            {/* PRIMARY CAMERA SHUTTER BUTTON (Large Circular Shutter) */}
+            <div className="flex flex-col items-center">
+              {cameraActive ? (
+                <button
+                  type="button"
+                  onClick={handleSnapLivePhoto}
+                  disabled={analyzingPhoto}
+                  className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center p-1 shadow-[0_0_30px_rgba(255,255,255,0.4)] active:scale-90 transition-transform disabled:opacity-50"
+                  title="Take Photo and Check Recalls"
+                >
+                  <div className="w-full h-full rounded-full bg-white hover:bg-red-500 transition-colors shadow-inner" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => startCamera(undefined, facingMode)}
+                  className="w-18 h-18 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-xl active:scale-95 transition-all"
+                  title="Resume Camera"
+                >
+                  <Camera className="w-8 h-8" />
+                </button>
+              )}
+              <span className="text-[11px] font-extrabold text-white mt-1.5 tracking-wide drop-shadow-md">
+                {cameraActive ? 'Take Photo' : 'Resume Camera'}
+              </span>
+            </div>
+
+            {/* Device Camera Intent Button */}
+            <div className="flex flex-col items-center">
+              <input
+                type="file"
+                id="fullscreen-native-camera"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleVisionImageFile(file);
+                  e.target.value = '';
+                }}
+              />
+              <label
+                htmlFor="fullscreen-native-camera"
+                onClick={() => stopCamera()}
+                className="w-13 h-13 rounded-full bg-white/15 hover:bg-white/25 border border-white/25 backdrop-blur-md flex items-center justify-center cursor-pointer transition-all active:scale-90 shadow-lg text-white"
+                title="Take photo with native camera app"
               >
-                <Camera className="w-8 h-8" />
-              </button>
-            )}
-            <span className="text-[11px] font-extrabold text-white mt-1.5 tracking-wide drop-shadow-md">
-              {cameraActive ? 'Take Photo' : 'Resume Camera'}
-            </span>
+                <Camera className="w-5 h-5" />
+              </label>
+              <span className="text-[10px] font-semibold text-white/90 mt-1">App Camera</span>
+            </div>
           </div>
 
-          {/* Device Camera Intent Button */}
-          <div className="flex flex-col items-center">
-            <input
-              type="file"
-              id="fullscreen-native-camera"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleVisionImageFile(file);
-                e.target.value = '';
-              }}
-            />
-            <label
-              htmlFor="fullscreen-native-camera"
-              onClick={() => stopCamera()}
-              className="w-13 h-13 rounded-full bg-white/15 hover:bg-white/25 border border-white/25 backdrop-blur-md flex items-center justify-center cursor-pointer transition-all active:scale-90 shadow-lg text-white"
-              title="Take photo with native camera app"
-            >
-              <Camera className="w-5 h-5" />
-            </label>
-            <span className="text-[10px] font-semibold text-white/90 mt-1">App Camera</span>
-          </div>
+          {/* Non-Endorsement Disclaimer under controls */}
+          <p className="text-[9px] text-white/65 text-center max-w-sm mx-auto leading-tight pt-1">
+            Disclaimer: Independent recall tool. Not endorsed by, affiliated with, or sponsored by Health Canada, CFIA, Transport Canada, or the Government of Canada.
+          </p>
         </div>
       )}
 
@@ -1210,6 +1261,17 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
                 <p>• If you suspect a product hazard or illness, report it directly to Health Canada.</p>
               </div>
             )}
+
+            {/* Non-Endorsement Disclaimer */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-2xl text-left space-y-1">
+              <div className="flex items-center gap-1.5 text-slate-700 font-bold text-[10px] uppercase tracking-wider">
+                <Shield className="w-3.5 h-3.5 text-slate-500" />
+                <span>Non-Endorsement Disclaimer</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                This application is an independent safety search tool. It is not endorsed by, sponsored by, or affiliated with Health Canada, the Canadian Food Inspection Agency (CFIA), Transport Canada, or the Government of Canada.
+              </p>
+            </div>
 
             {/* Action Buttons */}
             <div className="flex flex-col gap-2 pt-2">

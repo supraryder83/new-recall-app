@@ -451,7 +451,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <div className="max-w-md mx-auto space-y-1.5">
             <h3 className="font-extrabold text-lg text-slate-900">No Product Scans Yet</h3>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              When you snap a photo of any grocery item, household product, or vehicle part, Gemini will identify it, check for active Canadian recalls, and save it to your permanent safety log for continuous 6-hour monitoring.
+              When you snap a photo of any grocery item, household product, barcode, or serial number, the AI scanner will identify it, check for active Canadian recalls, and save it to your permanent safety log for continuous 6-hour monitoring.
             </p>
           </div>
           <button
