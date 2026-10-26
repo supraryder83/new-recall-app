@@ -32,7 +32,7 @@ interface SettingsViewProps {
   onRefreshFeed: () => void;
   canInstallPwa: boolean;
   onInstallPwa: () => void;
-  onNavigateToWatchlist?: () => void;
+  onNavigateToHistory?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -40,7 +40,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onRefreshFeed,
   canInstallPwa,
   onInstallPwa,
-  onNavigateToWatchlist
+  onNavigateToHistory
 }) => {
   const [workerStatus, setWorkerStatus] = useState<WorkerStatusResponse | null>(null);
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
@@ -93,18 +93,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleTriggerManualSync = async () => {
     setIsTriggeringSync(true);
-    setSyncFeedback('Running 6-hour sync pipeline against Health Canada feed...');
+    setSyncFeedback('Updating recall database and verifying scan history...');
     try {
       const res = await triggerManualSync({ forceAll: true });
       if (res.success && res.summary) {
         setSyncFeedback(
-          `Sync completed in ${res.summary.durationMs}ms: Ingested ${res.summary.recordsIngested} recalls, found ${res.summary.userMatchesFound} watchlist match(es), dispatched ${res.summary.pushNotificationsDispatched} push alert(s).`
+          `Sync completed in ${res.summary.durationMs}ms: Ingested ${res.summary.recordsIngested} recalls, verified scan history, dispatched ${res.summary.pushNotificationsDispatched} push alert(s).`
         );
       } else {
         setSyncFeedback(`Sync error: ${res.error || 'Unknown error'}`);
       }
       const updated = await fetchWorkerStatus();
       if (updated) setWorkerStatus(updated);
+      onRefreshFeed();
     } finally {
       setIsTriggeringSync(false);
     }
@@ -132,11 +133,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       <div>
         <h2 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight">App Settings</h2>
         <p className="text-xs md:text-sm text-slate-500 mt-0.5">
-          6-hour background sync worker, Web Push notifications & offline database
+          Live safety database updates, scan history protection & Web Push notifications
         </p>
       </div>
 
-      {/* 6-HOUR BACKGROUND SYNC WORKER CARD */}
+      {/* RECALL DATABASE SYNC & HISTORY VERIFICATION CARD */}
       <div className="p-4 sm:p-5 bg-white rounded-2xl border border-red-200/90 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -146,14 +147,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="font-extrabold text-sm md:text-base text-slate-900">
-                  6-Hour Background Sync Worker
+                  Recall Database Sync & History Protection
                 </h4>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-emerald-100 text-emerald-800">
-                  Active
+                  Checks On App Open
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-mono">
-                Cron: <strong className="text-slate-800">0 */6 * * *</strong> (Every 6 hours)
+              <p className="text-xs text-slate-500">
+                Pulls Health Canada & CFIA updates on open and verifies against your scan history.
               </p>
             </div>
           </div>
@@ -165,7 +166,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             className="py-2 px-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-60 shrink-0"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isTriggeringSync ? 'animate-spin' : ''}`} />
-            <span>{isTriggeringSync ? 'Running Sync...' : 'Trigger 6h Sync Now'}</span>
+            <span>{isTriggeringSync ? 'Updating...' : 'Update & Check History Now'}</span>
           </button>
         </div>
 
@@ -173,22 +174,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-100 text-xs">
           <div>
             <span className="text-slate-500 block text-[11px]">Last Sync Run</span>
-            <strong className="text-slate-900">{formatSyncTime(workerStatus?.lastRunAt)}</strong>
+            <strong className="text-slate-900">{formatSyncTime(workerStatus?.lastRunAt || syncState.lastSynced)}</strong>
           </div>
           <div>
-            <span className="text-slate-500 block text-[11px]">Next Scheduled</span>
-            <strong className="text-slate-900">{formatSyncTime(workerStatus?.nextRunAt)}</strong>
+            <span className="text-slate-500 block text-[11px]">Auto Verification</span>
+            <strong className="text-slate-900">Every App Open</strong>
           </div>
           <div>
-            <span className="text-slate-500 block text-[11px]">Deduplicated Store</span>
+            <span className="text-slate-500 block text-[11px]">Database Notices</span>
             <strong className="text-slate-900 font-mono">
-              {workerStatus ? workerStatus.processedRecallsCount.toLocaleString() : 'Loading...'}
+              {workerStatus ? workerStatus.processedRecallsCount.toLocaleString() : (syncState.totalRecords ? syncState.totalRecords.toLocaleString() : 'Loading...')}
             </strong>
           </div>
           <div>
-            <span className="text-slate-500 block text-[11px]">Active Watchlist</span>
+            <span className="text-slate-500 block text-[11px]">Monitored Products</span>
             <strong className="text-slate-900 font-mono">
-              {workerStatus ? `${workerStatus.watchlistCount} items` : 'Loading...'}
+              Scan History
             </strong>
           </div>
         </div>
@@ -201,16 +202,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         <div className="text-[11px] text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-slate-100">
           <span>
-            Pulls Health Canada updates modified in the last 24h & deduplicates against{' '}
-            <code className="text-slate-700 font-mono">processed_recalls</code>.
+            Continuously syncs with Health Canada and alerts you immediately if scanned products are recalled.
           </span>
-          {onNavigateToWatchlist && (
+          {onNavigateToHistory && (
             <button
               type="button"
-              onClick={onNavigateToWatchlist}
+              onClick={onNavigateToHistory}
               className="text-red-600 font-bold hover:underline shrink-0 text-left"
             >
-              Manage Watchlist →
+              View Scan History →
             </button>
           )}
         </div>

@@ -8,9 +8,16 @@ import {
   BellRing
 } from 'lucide-react';
 import type { RecallItem, CategoryFilter, DatasetSyncState, ScanHistoryItem } from './types/recall';
-import { fetchRecallsData, filterRecalls } from './services/recallData';
 import {
-  startPeriodicHistoryMonitor,
+  fetchRecallsData,
+  filterRecalls,
+  loadInstantCachedRecalls,
+  syncLiveRecallsDatabase
+} from './services/recallData';
+import { recallStorage } from './services/storage';
+import {
+  initAppOpenHistoryMonitor,
+  updateDatabaseAndCheckHistory,
   requestRecallNotificationPermission,
   getProductVariationGrouping
 } from './services/historyMonitor';
@@ -25,7 +32,6 @@ import { BottomNavBar, type MobileTab } from './components/BottomNavBar';
 import { CategoriesView } from './components/CategoriesView';
 import { SettingsView } from './components/SettingsView';
 import { HistoryView } from './components/HistoryView';
-import { WatchlistView } from './components/WatchlistView';
 
 const ITEMS_PER_PAGE = 30;
 
@@ -138,40 +144,86 @@ export const App: React.FC = () => {
     }
   };
 
-  // Instant Load & Background Sync
+  // Load Data & Update Database on App Open
   const loadData = useCallback(async (forceRefresh = false) => {
     setSyncState((prev) => ({ ...prev, status: 'loading', errorMessage: undefined }));
     try {
-      const res = await fetchRecallsData(forceRefresh, (step) => setLoadingProgress(step));
-      setAllRecalls(res.data);
-      setSyncState({
-        status: 'cached',
-        lastSynced: Date.now(),
-        totalRecords: res.count,
-        source: res.source
-      });
+      if (forceRefresh) {
+        const syncRes = await updateDatabaseAndCheckHistory((step) => setLoadingProgress(step));
+        const updated = await recallStorage.getAllRecalls();
+        setAllRecalls(updated.length > 0 ? updated : []);
+        setSyncState({
+          status: 'cached',
+          lastSynced: syncRes.timestamp,
+          totalRecords: syncRes.recallsCount,
+          source: (syncRes.source as any) || 'live'
+        });
+      } else {
+        // Fast path: load cached data first so UI renders instantly
+        const instant = await loadInstantCachedRecalls();
+        if (instant && instant.data.length > 0) {
+          setAllRecalls(instant.data);
+          setSyncState({
+            status: 'cached',
+            lastSynced: Date.now(),
+            totalRecords: instant.count,
+            source: instant.source
+          });
+        }
+
+        // Then immediately update database from live feed and check history
+        const syncRes = await updateDatabaseAndCheckHistory((step) => setLoadingProgress(step));
+        if (syncRes.recallsCount > 0) {
+          const updated = await recallStorage.getAllRecalls();
+          if (updated.length > 0) {
+            setAllRecalls(updated);
+            setSyncState({
+              status: 'cached',
+              lastSynced: syncRes.timestamp,
+              totalRecords: syncRes.recallsCount,
+              source: (syncRes.source as any) || 'live'
+            });
+          }
+        }
+      }
     } catch (err: any) {
-      console.error('Failed to load recalls:', err);
-      setSyncState((prev) => ({
-        ...prev,
-        status: 'error',
-        errorMessage: err?.message || 'Error downloading Canadian safety recalls.'
-      }));
+      console.warn('App open database update error:', err);
+      // Fallback: load any existing cached data
+      const existing = await recallStorage.getAllRecalls();
+      if (existing.length > 0) {
+        setAllRecalls(existing);
+        setSyncState({
+          status: 'cached',
+          lastSynced: Date.now(),
+          totalRecords: existing.length,
+          source: 'indexeddb'
+        });
+      } else {
+        setSyncState((prev) => ({
+          ...prev,
+          status: 'error',
+          errorMessage: err?.message || 'Error downloading Canadian safety recalls.'
+        }));
+      }
     }
   }, []);
 
+  // Update recall database and check scan history when the app is opened
   useEffect(() => {
     loadData(false);
-  }, [loadData]);
 
-  // Start periodic 6-hour background safety verification against Canadian safety recalls
-  useEffect(() => {
-    if (allRecalls.length === 0) return;
+    // Initialize resume / focus monitor so returning to app checks for new recalls
+    const cleanupMonitor = initAppOpenHistoryMonitor((updatedRecalls) => {
+      setAllRecalls(updatedRecalls);
+      setSyncState({
+        status: 'cached',
+        lastSynced: Date.now(),
+        totalRecords: updatedRecalls.length,
+        source: 'live'
+      });
+    });
 
-    // Start 6-hour monitor
-    const cleanup = startPeriodicHistoryMonitor(() => allRecalls);
-
-    // Listen for recall alerts triggered by 6-hour verification
+    // Listen for recall alerts triggered by verification
     const handleRecallAlert = (e: any) => {
       const items = e.detail?.newlyRecalledItems;
       if (Array.isArray(items) && items.length > 0) {
@@ -182,10 +234,10 @@ export const App: React.FC = () => {
     window.addEventListener('recall-monitoring-alert', handleRecallAlert);
 
     return () => {
-      cleanup();
+      cleanupMonitor();
       window.removeEventListener('recall-monitoring-alert', handleRecallAlert);
     };
-  }, [allRecalls]);
+  }, [loadData]);
 
   // Handle deep link routing for /recalls/:id (PWA Web Push notifications and direct links)
   useEffect(() => {
@@ -328,7 +380,7 @@ export const App: React.FC = () => {
                 }
               }}
               className="relative p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all border border-slate-200/80 active:scale-95 flex items-center gap-1.5 text-xs font-semibold"
-              title="Recall Notifications & 6-Hour Protection"
+              title="Recall Notifications & Automatic Scan History Protection"
               aria-label="Recall Notifications"
             >
               <BellRing className="w-4 h-4 text-slate-700" />
@@ -372,11 +424,11 @@ export const App: React.FC = () => {
                       Enable Canadian Recall Notifications
                     </h4>
                     <span className="text-[10px] font-extrabold bg-white/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      Automatic 6h Protection
+                      Auto-Monitored
                     </span>
                   </div>
                   <p className="text-xs text-red-100 mt-1 leading-relaxed">
-                    Allow notifications to receive automatic alerts every 6 hours if any product in your scan history is recalled by Health Canada or CFIA.
+                    Allow notifications to receive immediate alerts whenever the app updates if any product in your scan history is recalled by Health Canada, CFIA, or Transport Canada.
                   </p>
                 </div>
               </div>
@@ -400,7 +452,7 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* Urgent 6-Hour Safety Recall Alert Banner */}
+          {/* Urgent Safety Recall Alert Banner */}
           {monitoringAlerts.length > 0 && (
             <div className="bg-red-600 text-white p-4 sm:p-5 rounded-3xl shadow-lg border border-red-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top duration-300">
               <div className="flex items-start gap-3 min-w-0">
@@ -413,7 +465,7 @@ export const App: React.FC = () => {
                       🚨 Safety Recall Alert: Scanned Product Recalled!
                     </h4>
                     <span className="text-[10px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                      6-Hour Monitor
+                      History Alert
                     </span>
                   </div>
                   <p className="text-xs text-red-100 mt-1 line-clamp-2 leading-relaxed">
@@ -590,15 +642,7 @@ export const App: React.FC = () => {
             />
           )}
 
-          {/* TAB 3: PRODUCT WATCHLIST */}
-          {currentTab === 'watchlist' && (
-            <WatchlistView
-              allRecalls={allRecalls}
-              onSelectRecall={handleSelectRecall}
-            />
-          )}
-
-          {/* TAB 4: SCAN HISTORY */}
+          {/* TAB 3: SCAN HISTORY & MONITORED PRODUCTS */}
           {currentTab === 'history' && (
             <HistoryView
               recallsDataset={allRecalls}
@@ -611,14 +655,14 @@ export const App: React.FC = () => {
             />
           )}
 
-          {/* TAB 5: SETTINGS */}
+          {/* TAB 4: SETTINGS */}
           {currentTab === 'settings' && (
             <SettingsView
               syncState={syncState}
               onRefreshFeed={() => loadData(true)}
               canInstallPwa={Boolean(deferredPrompt)}
               onInstallPwa={handleInstallPwa}
-              onNavigateToWatchlist={() => setCurrentTab('watchlist')}
+              onNavigateToHistory={() => setCurrentTab('history')}
             />
           )}
         </main>

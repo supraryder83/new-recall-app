@@ -15,17 +15,14 @@ import {
   BellRing,
   RefreshCw,
   CheckCircle2,
-  Shield,
-  BookmarkPlus,
-  BookmarkCheck
+  Shield
 } from 'lucide-react';
 import type { RecallItem, ScanHistoryItem } from '../types/recall';
 import { getScanHistory } from '../services/scanHistory';
-import { addWatchlistItem } from '../services/pipelineClient';
 import {
+  updateDatabaseAndCheckHistory,
   checkHistoryAgainstRecalls,
   getLastHistoryCheckTime,
-  getNextHistoryCheckTime,
   hasNotificationPermission,
   requestRecallNotificationPermission,
   getNotifiedRecallRecords,
@@ -150,11 +147,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [notifiedRecords, setNotifiedRecords] = useState<NotifiedRecallRecord[]>([]);
   const [showNotifiedLog, setShowNotifiedLog] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState<number | null>(null);
-  const [nextCheckTime, setNextCheckTime] = useState<number>(Date.now());
   const [isVerifyingNow, setIsVerifyingNow] = useState(false);
   const [verificationFeedback, setVerificationFeedback] = useState<string | null>(null);
   const [notificationsGranted, setNotificationsGranted] = useState(false);
-  const [watchedIds, setWatchedIds] = useState<Set<string>>(new Set());
 
   // Load history, check timestamps, notification records & permissions
   useEffect(() => {
@@ -162,7 +157,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       setHistoryItems(getScanHistory());
       setNotifiedRecords(getNotifiedRecallRecords());
       setLastCheckTime(getLastHistoryCheckTime());
-      setNextCheckTime(getNextHistoryCheckTime());
       setNotificationsGranted(hasNotificationPermission());
     };
     load();
@@ -193,18 +187,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   };
 
   const handleVerifyNow = async () => {
-    if (!recallsDataset || recallsDataset.length === 0) {
-      setVerificationFeedback('Canadian recall database is syncing. Please wait a moment...');
-      setTimeout(() => setVerificationFeedback(null), 4000);
-      return;
-    }
-
     setIsVerifyingNow(true);
-    setVerificationFeedback(null);
+    setVerificationFeedback('Updating Canadian recall database and checking history...');
     try {
-      const result = await checkHistoryAgainstRecalls(recallsDataset, true);
+      const result = await updateDatabaseAndCheckHistory((step) => {
+        setVerificationFeedback(step);
+      });
       setLastCheckTime(result.timestamp);
-      setNextCheckTime(getNextHistoryCheckTime());
       setHistoryItems(getScanHistory());
       setNotifiedRecords(getNotifiedRecallRecords());
 
@@ -214,12 +203,26 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         );
       } else {
         setVerificationFeedback(
-          `✅ 6-Hour verification complete: All ${result.checkedCount} scanned products verified against ${recallsDataset.length.toLocaleString()} Canadian recall notices. No new recalls found.`
+          `✅ Verification complete: Database updated with ${result.recallsCount.toLocaleString()} notices. All ${result.checkedCount} scanned products checked. No new recalls found.`
         );
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Manual history verification error:', err);
-      setVerificationFeedback('Failed to complete recall verification. Please try again.');
+      // Fallback check against existing dataset if network was unreachable
+      if (recallsDataset && recallsDataset.length > 0) {
+        try {
+          const res = await checkHistoryAgainstRecalls(recallsDataset, true);
+          setLastCheckTime(res.timestamp);
+          setHistoryItems(getScanHistory());
+          setVerificationFeedback(
+            `Checked against offline database: All ${res.checkedCount} products verified.`
+          );
+        } catch {
+          setVerificationFeedback('Failed to complete recall verification.');
+        }
+      } else {
+        setVerificationFeedback('Failed to complete recall verification. Please try again.');
+      }
     } finally {
       setIsVerifyingNow(false);
       setTimeout(() => {
@@ -246,7 +249,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 break-words [overflow-wrap:anywhere]">
-            Permanent safety log & continuous 6-hour Canadian recall monitoring
+            Your permanent safety log & automatic recall verification on app open
           </p>
         </div>
 
@@ -274,7 +277,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
       </div>
 
-      {/* 6-Hour Safety Verification & Notification Monitor Card */}
+      {/* Automatic Safety Verification & Notification Monitor Card */}
       <div className="bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-md border border-slate-800 space-y-3 sm:space-y-4 max-w-full min-w-0 overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 min-w-0">
           <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -284,15 +287,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
                 <h3 className="font-extrabold text-sm sm:text-lg text-white break-words">
-                  6-Hour Safety Recall Monitor
+                  Automatic Recall Protection
                 </h3>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Active (6h)
+                  Checks on App Open
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed break-words [overflow-wrap:anywhere]">
-                Checks <strong>only products in your scan history</strong> against Health Canada, CFIA, and Transport Canada safety databases every 6 hours. Notifications from variations of the same product are consolidated to prevent duplicates.
+                Every product in your scan history is continuously monitored. Whenever you open the app, the recall database is updated from Health Canada and checked against your scan history. You receive immediate alerts if any scanned product is recalled.
               </p>
             </div>
           </div>
@@ -322,10 +325,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               onClick={handleVerifyNow}
               disabled={isVerifyingNow || totalScans === 0}
               className="flex-1 sm:flex-initial px-3.5 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all border border-white/20 flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap min-w-0"
-              title="Run on-demand check of history items against latest Canadian recall records"
+              title="Update recall database and check history now"
             >
               <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isVerifyingNow ? 'animate-spin text-red-400' : ''}`} />
-              <span>{isVerifyingNow ? 'Verifying...' : 'Verify Now'}</span>
+              <span>{isVerifyingNow ? 'Updating & Checking...' : 'Check for New Recalls Now'}</span>
             </button>
           </div>
         </div>
@@ -335,7 +338,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0">
             <span className="flex items-center gap-1.5 flex-wrap min-w-0">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="shrink-0">Last Checked:</span>
+              <span className="shrink-0">Last Verified:</span>
               <strong className="text-slate-200 break-words">
                 {lastCheckTime ? formatTimestamp(lastCheckTime) : 'Checking automatically'}
               </strong>
@@ -343,15 +346,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
             <span className="flex items-center gap-1.5 flex-wrap min-w-0">
               <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="shrink-0">Next Check:</span>
+              <span className="shrink-0">Schedule:</span>
               <strong className="text-slate-200 break-words">
-                {nextCheckTime ? (
-                  Date.now() >= nextCheckTime
-                    ? 'Due now'
-                    : `In ~${Math.max(1, Math.round((nextCheckTime - Date.now()) / (1000 * 60 * 60)))}h`
-                ) : (
-                  'Every 6 hours'
-                )}
+                On every app open & resume
               </strong>
             </span>
 
@@ -599,11 +596,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       </span>
                     )}
 
-                    {/* 6-Hour Verification Status Timestamp */}
+                    {/* Automatic Verification Status Timestamp */}
                     <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 min-w-0">
                       <span className="inline-flex items-center gap-1 text-slate-500 shrink-0">
                         <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
-                        <span>Protected by 6h monitor</span>
+                        <span>Auto-checked on app open</span>
                       </span>
                       {item.lastCheckedAt && (
                         <span className="break-words">• Verified {formatTimestamp(item.lastCheckedAt)}</span>
@@ -614,37 +611,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                 {/* Right Section: Actions */}
                 <div className="flex items-center gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 min-w-0">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await addWatchlistItem({
-                        productName: item.identifiedTitle,
-                        brand: item.extractedInfo?.brand || '',
-                        modelNumber: item.extractedInfo?.modelOrLot || item.extractedInfo?.modelOrBatchNumber,
-                        upcBarcode: item.extractedInfo?.upcOrCode,
-                        keywords: item.searchKeywords ? item.searchKeywords.split(' ') : undefined
-                      });
-                      setWatchedIds((prev) => new Set([...prev, item.id]));
-                    }}
-                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shrink-0 ${
-                      watchedIds.has(item.id)
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                    }`}
-                    title="Add product to 6-hour background sync watchlist"
+                  <span
+                    className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 flex items-center justify-center gap-1 shrink-0"
+                    title="This product is in your history and is automatically verified for recalls when the app is opened"
                   >
-                    {watchedIds.has(item.id) ? (
-                      <>
-                        <BookmarkCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        <span className="hidden sm:inline">Watching</span>
-                      </>
-                    ) : (
-                      <>
-                        <BookmarkPlus className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Watch</span>
-                      </>
-                    )}
-                  </button>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Monitored</span>
+                  </span>
 
                   <button
                     type="button"

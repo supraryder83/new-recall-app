@@ -1,6 +1,8 @@
 import type { RecallItem, ScanHistoryItem } from '../types/recall';
 import { getScanHistory, updateMultipleScansInHistory } from './scanHistory';
 import { crossReferenceRecallDataset } from './gemini';
+import { syncLiveRecallsDatabase } from './recallData';
+import { recallStorage } from './storage';
 
 export const SIX_HOURS_MS = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
 const LAST_CHECK_KEY = 'canada_recall_history_last_check_ts';
@@ -17,6 +19,15 @@ export interface NotifiedRecallRecord {
 }
 
 export interface HistoryCheckResult {
+  checkedCount: number;
+  newlyRecalledCount: number;
+  newlyRecalledItems: { historyItem: ScanHistoryItem; recall: RecallItem }[];
+  timestamp: number;
+}
+
+export interface AppOpenSyncResult {
+  recallsCount: number;
+  source: string;
   checkedCount: number;
   newlyRecalledCount: number;
   newlyRecalledItems: { historyItem: ScanHistoryItem; recall: RecallItem }[];
@@ -224,20 +235,9 @@ export function getProductVariationGrouping(item: ScanHistoryItem): {
  */
 export async function checkHistoryAgainstRecalls(
   recallsDataset: RecallItem[],
-  force: boolean = false
+  _force: boolean = true
 ): Promise<HistoryCheckResult> {
-  const lastCheck = getLastHistoryCheckTime();
   const now = Date.now();
-
-  // If not forced and 6 hours have not elapsed yet, return early
-  if (!force && lastCheck && now - lastCheck < SIX_HOURS_MS) {
-    return {
-      checkedCount: 0,
-      newlyRecalledCount: 0,
-      newlyRecalledItems: [],
-      timestamp: lastCheck
-    };
-  }
 
   // ALWAYS and ONLY check the list of items the user scanned that are in the persistent history log
   const history = getScanHistory();
@@ -410,37 +410,87 @@ export async function checkHistoryAgainstRecalls(
 }
 
 /**
- * Initializes the recurring 6-hour background verification monitor.
- * Runs on startup automatically if due (or never run), and periodically evaluates every 1 minute.
+ * UPDATES THE DATABASE OF RECALLS AND THEN CHECKS HISTORY AGAINST NEW RECALLS.
+ * Executes automatically when the app is opened, when resumed, or on user command.
  */
-export function startPeriodicHistoryMonitor(
-  getRecallsDataset: () => RecallItem[]
-): () => void {
-  // Check automatically on startup if due or never run before
-  const initialDataset = getRecallsDataset();
-  if (initialDataset && initialDataset.length > 0) {
-    const lastCheck = getLastHistoryCheckTime();
-    if (!lastCheck || Date.now() - lastCheck >= SIX_HOURS_MS) {
-      checkHistoryAgainstRecalls(initialDataset, false).catch((err) =>
-        console.warn('Automatic initial 6-hour history check error:', err)
-      );
-    }
-  }
+export async function updateDatabaseAndCheckHistory(
+  onProgress?: (step: string) => void
+): Promise<AppOpenSyncResult> {
+  onProgress?.('Updating Canadian safety recall database...');
+  const recallsRes = await syncLiveRecallsDatabase(onProgress);
 
-  // Check every 1 minute whether the 6-hour interval has elapsed
-  const intervalId = window.setInterval(() => {
-    const dataset = getRecallsDataset();
-    if (dataset && dataset.length > 0) {
-      const lastCheck = getLastHistoryCheckTime();
-      if (!lastCheck || Date.now() - lastCheck >= SIX_HOURS_MS) {
-        checkHistoryAgainstRecalls(dataset, false).catch((err) =>
-          console.warn('Automatic scheduled 6-hour history check error:', err)
-        );
-      }
-    }
-  }, 60 * 1000);
+  onProgress?.('Checking your scan history against latest safety recalls...');
+  const checkResult = await checkHistoryAgainstRecalls(recallsRes.data, true);
 
-  return () => {
-    window.clearInterval(intervalId);
+  return {
+    recallsCount: recallsRes.count,
+    source: recallsRes.source,
+    checkedCount: checkResult.checkedCount,
+    newlyRecalledCount: checkResult.newlyRecalledCount,
+    newlyRecalledItems: checkResult.newlyRecalledItems,
+    timestamp: checkResult.timestamp
   };
 }
+
+/**
+ * Initializes automatic database update and scan history verification when the app is opened.
+ * Also monitors document visibility and window focus so returning to the app checks for new recalls.
+ */
+export function initAppOpenHistoryMonitor(
+  onRecallsUpdated?: (recalls: RecallItem[]) => void,
+  onProgress?: (step: string) => void
+): () => void {
+  // 1. Run immediately on app open: update database of recalls and check history
+  updateDatabaseAndCheckHistory(onProgress)
+    .then((res) => {
+      if (res.recallsCount > 0 && onRecallsUpdated) {
+        recallStorage.getAllRecalls().then((data) => {
+          if (data && data.length > 0) {
+            onRecallsUpdated(data);
+          }
+        });
+      }
+    })
+    .catch((err) => {
+      console.warn('[HistoryMonitor] App-open update warning:', err);
+    });
+
+  // 2. Check whenever user resumes or refocuses the app (with 3-minute throttle)
+  let lastCheckTime = Date.now();
+  const handleResume = () => {
+    if (document.visibilityState === 'visible') {
+      const now = Date.now();
+      if (now - lastCheckTime > 3 * 60 * 1000) {
+        lastCheckTime = now;
+        updateDatabaseAndCheckHistory(onProgress)
+          .then((res) => {
+            if (res.recallsCount > 0 && onRecallsUpdated) {
+              recallStorage.getAllRecalls().then((data) => {
+                if (data && data.length > 0) {
+                  onRecallsUpdated(data);
+                }
+              });
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  };
+
+  document.addEventListener('visibilitychange', handleResume);
+  window.addEventListener('focus', handleResume);
+
+  return () => {
+    document.removeEventListener('visibilitychange', handleResume);
+    window.removeEventListener('focus', handleResume);
+  };
+}
+
+/**
+ * Alias for backward compatibility
+ */
+export const startPeriodicHistoryMonitor = (
+  _getRecallsDataset?: () => RecallItem[]
+): (() => void) => {
+  return initAppOpenHistoryMonitor();
+};

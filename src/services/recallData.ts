@@ -117,55 +117,59 @@ export interface FetchFeedResult {
 }
 
 /**
- * INSTANT LOAD: Always serves cached / bundled data immediately (< 20ms).
- * Does NOT sync every time. Only syncs when user clicks "Sync Live Feed" (forceRefresh=true).
+ * INSTANT LOAD: Serves cached IndexedDB or bundled data immediately (< 20ms)
+ * so the application displays without waiting on network.
  */
-export async function fetchRecallsData(
-  forceRefresh = false,
-  onProgress?: (step: string) => void
-): Promise<FetchFeedResult> {
-  // 1. FAST PATH: Return cached IndexedDB data immediately if available and full dataset (> 5,000 records)
-  if (!forceRefresh) {
-    const cached = await recallStorage.getAllRecalls();
-    if (cached && cached.length > 5000) {
-      return {
-        data: cached,
-        source: 'indexeddb',
-        count: cached.length
-      };
-    }
-
-    // 2. FAST FALLBACK: Pre-bundled local file loads in ~10ms
-    try {
-      const bundledRes = await fetch('/data/initial-recalls.json');
-      if (bundledRes.ok) {
-        const bundledData = await bundledRes.json();
-        if (Array.isArray(bundledData) && bundledData.length > 0) {
-          // Save to IndexedDB in background
-          recallStorage.saveRecalls(bundledData, 'bundled');
-          return {
-            data: bundledData,
-            source: 'bundled',
-            count: bundledData.length
-          };
-        }
-      }
-    } catch {
-      // Continue to network if bundled fails
-    }
+export async function loadInstantCachedRecalls(): Promise<FetchFeedResult | null> {
+  // 1. FAST PATH: Return cached IndexedDB data immediately if available
+  const cached = await recallStorage.getAllRecalls();
+  if (cached && cached.length > 5000) {
+    return {
+      data: cached,
+      source: 'indexeddb',
+      count: cached.length
+    };
   }
 
-  // 3. NETWORK SYNC (Only when user explicitly asked or initial setup)
-  onProgress?.('Fetching live Canadian recall notices...');
+  // 2. FAST FALLBACK: Pre-bundled local file loads in ~10ms
+  try {
+    const bundledRes = await fetch('/data/initial-recalls.json');
+    if (bundledRes.ok) {
+      const bundledData = await bundledRes.json();
+      if (Array.isArray(bundledData) && bundledData.length > 0) {
+        recallStorage.saveRecalls(bundledData, 'bundled');
+        return {
+          data: bundledData,
+          source: 'bundled',
+          count: bundledData.length
+        };
+      }
+    }
+  } catch {
+    // Continue to network if bundled fails
+  }
 
-  // Try Vite proxy or direct fetch with short 5s timeout
+  return null;
+}
+
+/**
+ * LIVE DATABASE SYNC: Fetches the latest live Health Canada / CFIA / Transport Canada
+ * open data feed, saves the updated records into IndexedDB, and returns the dataset.
+ * Called automatically when the app is opened and on manual refresh.
+ */
+export async function syncLiveRecallsDatabase(
+  onProgress?: (step: string) => void
+): Promise<FetchFeedResult> {
+  onProgress?.('Connecting to Canadian Open Data safety registry...');
+
+  // Try Vite dev proxy first (/api/recalls), then direct Open Data URL, then CORS proxies
   const candidateUrls = ['/api/recalls', PRIMARY_FEED_URL, ...PROXY_ENDPOINTS.slice(1)];
 
   for (const url of candidateUrls) {
     try {
-      onProgress?.('Checking Canadian Open Data feed...');
+      onProgress?.('Fetching latest Health Canada & CFIA recall updates...');
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 6000);
+      const timeout = setTimeout(() => controller.abort(), 7000);
       const res = await fetch(url, {
         signal: controller.signal,
         headers: { Accept: 'application/json' }
@@ -173,7 +177,7 @@ export async function fetchRecallsData(
       clearTimeout(timeout);
 
       if (res.ok) {
-        onProgress?.('Processing safety notices...');
+        onProgress?.('Parsing Canadian safety notices...');
         let json = await res.json();
         if (json && json.contents && typeof json.contents === 'string') {
           json = JSON.parse(json.contents);
@@ -183,21 +187,31 @@ export async function fetchRecallsData(
         }
 
         if (Array.isArray(json) && json.length > 0) {
-          onProgress?.(`Caching ${json.length.toLocaleString()} notices...`);
-          await recallStorage.saveRecalls(json, url === '/api/recalls' || url === PRIMARY_FEED_URL ? 'live' : 'proxy');
+          onProgress?.(`Updating database with ${json.length.toLocaleString()} notices...`);
+          const source = url === '/api/recalls' || url === PRIMARY_FEED_URL ? 'live' : 'proxy';
+          await recallStorage.saveRecalls(json, source);
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('recalls-database-synced', {
+                detail: { count: json.length, source, timestamp: Date.now() }
+              })
+            );
+          }
+
           return {
             data: json,
-            source: url === '/api/recalls' || url === PRIMARY_FEED_URL ? 'live' : 'proxy',
+            source,
             count: json.length
           };
         }
       }
     } catch {
-      // Try next candidate without stalling
+      // Try next candidate without crashing
     }
   }
 
-  // Fallback if network was unreachable
+  // If live network requests failed (e.g. offline mode), return existing cached IndexedDB
   const existing = await recallStorage.getAllRecalls();
   if (existing.length > 0) {
     return {
@@ -208,14 +222,32 @@ export async function fetchRecallsData(
   }
 
   // Final fallback to bundled data
-  const res = await fetch('/data/initial-recalls.json');
-  const data = await res.json();
-  await recallStorage.saveRecalls(data, 'bundled');
-  return {
-    data,
-    source: 'bundled',
-    count: data.length
-  };
+  try {
+    const res = await fetch('/data/initial-recalls.json');
+    const data = await res.json();
+    await recallStorage.saveRecalls(data, 'bundled');
+    return {
+      data,
+      source: 'bundled',
+      count: data.length
+    };
+  } catch (err: any) {
+    throw new Error('Unable to connect to Canadian safety registry or load offline database.');
+  }
+}
+
+/**
+ * Fetch recalls dataset with instant cached fallback or live update
+ */
+export async function fetchRecallsData(
+  forceRefresh = false,
+  onProgress?: (step: string) => void
+): Promise<FetchFeedResult> {
+  if (!forceRefresh) {
+    const instant = await loadInstantCachedRecalls();
+    if (instant) return instant;
+  }
+  return syncLiveRecallsDatabase(onProgress);
 }
 
 /**
