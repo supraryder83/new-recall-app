@@ -42,6 +42,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
+        importScripts: ['/sw-push.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/recalls-rappels\.canada\.ca\/.*/i,
@@ -59,7 +60,25 @@ export default defineConfig({
           }
         ]
       }
-    })
+    }),
+    {
+      name: 'recall-pipeline-plugin',
+      async configureServer(server) {
+        const { handlePipelineApiRequest } = await import('./src/server/api.ts');
+        const { startSyncWorker } = await import('./src/server/worker.ts');
+
+        server.middlewares.use((req, res, next) => {
+          handlePipelineApiRequest(req, res, next);
+        });
+
+        // Initialize 6-hour background worker
+        try {
+          startSyncWorker({ runOnStartupIfDue: false });
+        } catch (err) {
+          console.warn('[Vite] Could not start sync worker in dev server:', err);
+        }
+      }
+    }
   ],
   server: {
     proxy: {

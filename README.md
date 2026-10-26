@@ -85,13 +85,60 @@ VITE_GEMINI_API_KEY=AIzaSy...
 ```bash
 npm run dev
 ```
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Open [http://localhost:5173](http://localhost:5173) in your browser. (The 6-hour background sync worker and pipeline API are integrated into the Vite dev server).
 
-### 5. Production Build
+### 5. Background Sync Worker CLI
+```bash
+# Run one-off sync pipeline immediately (fetches 24h window, deduplicates, reverse-lookups watchlist, and dispatches Web Push)
+npm run sync
+
+# Run standalone background sync daemon on cron (0 */6 * * *)
+npm run worker
+
+# Run comprehensive automated pipeline test suite
+npm run test:pipeline
+```
+
+### 6. Production Build
 ```bash
 npm run build
 npm run preview
 ```
+
+---
+
+## ⏰ 6-Hour Background Sync Worker & Reverse-Lookup Notification Pipeline
+
+The background sync pipeline operates on a scheduled cron cadence (`0 */6 * * *`) and executes the following stages:
+
+1. **Cron / Scheduled Worker**:
+   - Scheduled job running every 6 hours (`0 */6 * * *`, America/Toronto timezone).
+   - Queries the official Health Canada Open Data feed (`HCRSAMOpenData.json`) for records published or modified within the last 24 hours.
+   - Deduplicates incoming recall IDs against the persistent `processed_recalls` store (`data/pipeline-store.json`) to prevent redundant runs.
+
+2. **Ingestion & Normalization**:
+   - Extracts and normalizes: Recall ID (`NID`), title, category, publication date, and official URL.
+   - Extracts structured brand names, model numbers, UPCs/barcodes (8–14 digits), and lot codes from descriptions, converting to lowercase alphanumeric tokens for high-speed indexing.
+
+3. **Reverse Lookup Matching**:
+   - Queries the user `watchlist` collection against incoming normalized recall batches.
+   - Match criteria:
+     - **Exact match on UPC/barcode** (Highest priority, score: 100).
+     - **Normalized substring or exact match on model numbers** (score: 90–95).
+     - **Tokenized fuzzy match on brand + product keywords** (score: 75–85).
+   - Groups matched items by user ID to prevent spamming multiple notifications per cycle.
+
+4. **Notification Dispatch (PWA Web Push)**:
+   - Retrieves active Web Push API subscriptions (`PushSubscription` endpoint and p256dh/auth keys) using RFC 8291 / RFC 8292 VAPID encryption.
+   - Dispatches payloads:
+     - Title: `Product Recall Alert: [Product Name]`
+     - Body: Summary of recall reason and hazard.
+     - Data payload: Deep link URL pointing directly to the recall details view (`/recalls/:id`).
+   - Logs matches in the user's `notification_history` table and marks alerts as sent.
+
+5. **Error Handling & Rate Limiting**:
+   - Exponential backoff retry logic with jitter on external feed fetching.
+   - Automatic pruning and cleanup of expired or invalid push subscriptions (HTTP 404 / 410 Gone).
 
 ---
 

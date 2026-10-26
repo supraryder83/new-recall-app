@@ -25,6 +25,7 @@ import { BottomNavBar, type MobileTab } from './components/BottomNavBar';
 import { CategoriesView } from './components/CategoriesView';
 import { SettingsView } from './components/SettingsView';
 import { HistoryView } from './components/HistoryView';
+import { WatchlistView } from './components/WatchlistView';
 
 const ITEMS_PER_PAGE = 30;
 
@@ -185,6 +186,40 @@ export const App: React.FC = () => {
       window.removeEventListener('recall-monitoring-alert', handleRecallAlert);
     };
   }, [allRecalls]);
+
+  // Handle deep link routing for /recalls/:id (PWA Web Push notifications and direct links)
+  useEffect(() => {
+    const handleDeepLink = () => {
+      const path = window.location.pathname;
+      const match = path.match(/^\/recalls\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        const recallNid = match[1];
+        if (allRecalls.length > 0) {
+          const found = allRecalls.find((r) => r.NID === recallNid);
+          if (found) {
+            setSelectedRecall(found);
+          }
+        }
+      }
+    };
+
+    handleDeepLink();
+    window.addEventListener('popstate', handleDeepLink);
+    return () => window.removeEventListener('popstate', handleDeepLink);
+  }, [allRecalls]);
+
+  const handleSelectRecall = (recall: RecallItem | null) => {
+    setSelectedRecall(recall);
+    if (recall) {
+      if (window.location.pathname !== `/recalls/${recall.NID}`) {
+        window.history.pushState(null, '', `/recalls/${recall.NID}`);
+      }
+    } else {
+      if (window.location.pathname.startsWith('/recalls/')) {
+        window.history.pushState(null, '', '/');
+      }
+    }
+  };
 
   // Reset pagination when query or category changes
   useEffect(() => {
@@ -513,7 +548,7 @@ export const App: React.FC = () => {
                           <RecallCard
                             key={recall.NID}
                             recall={recall}
-                            onClick={() => setSelectedRecall(recall)}
+                            onClick={() => handleSelectRecall(recall)}
                           />
                         ))}
                       </div>
@@ -555,7 +590,15 @@ export const App: React.FC = () => {
             />
           )}
 
-          {/* TAB 3: SCAN HISTORY */}
+          {/* TAB 3: PRODUCT WATCHLIST */}
+          {currentTab === 'watchlist' && (
+            <WatchlistView
+              allRecalls={allRecalls}
+              onSelectRecall={handleSelectRecall}
+            />
+          )}
+
+          {/* TAB 4: SCAN HISTORY */}
           {currentTab === 'history' && (
             <HistoryView
               recallsDataset={allRecalls}
@@ -564,17 +607,18 @@ export const App: React.FC = () => {
                 setSearchQuery(query);
                 setCurrentTab('feed');
               }}
-              onSelectRecall={(recall) => setSelectedRecall(recall)}
+              onSelectRecall={(recall) => handleSelectRecall(recall)}
             />
           )}
 
-          {/* TAB 4: SETTINGS */}
+          {/* TAB 5: SETTINGS */}
           {currentTab === 'settings' && (
             <SettingsView
               syncState={syncState}
               onRefreshFeed={() => loadData(true)}
               canInstallPwa={Boolean(deferredPrompt)}
               onInstallPwa={handleInstallPwa}
+              onNavigateToWatchlist={() => setCurrentTab('watchlist')}
             />
           )}
         </main>
@@ -601,7 +645,7 @@ export const App: React.FC = () => {
           isOpen={isScannerOpen}
           onClose={() => setIsScannerOpen(false)}
           recallsDataset={allRecalls}
-          onSelectRecall={(recall) => setSelectedRecall(recall)}
+          onSelectRecall={(recall) => handleSelectRecall(recall)}
           onApplySearchQuery={(query) => {
             setSearchQuery(query);
             setCurrentTab('feed');
@@ -611,7 +655,7 @@ export const App: React.FC = () => {
         <RecallDetailModal
           recall={selectedRecall}
           isOpen={Boolean(selectedRecall)}
-          onClose={() => setSelectedRecall(null)}
+          onClose={() => handleSelectRecall(null)}
         />
       </div>
     </div>

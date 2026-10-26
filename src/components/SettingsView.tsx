@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Database,
@@ -6,24 +6,110 @@ import {
   Download,
   Trash2,
   ExternalLink,
-  Info
+  Info,
+  Clock,
+  Bell,
+  BellRing,
+  CheckCircle2,
+  AlertTriangle,
+  Send,
+  ShieldAlert
 } from 'lucide-react';
 import { recallStorage } from '../services/storage';
 import type { DatasetSyncState } from '../types/recall';
+import {
+  fetchWorkerStatus,
+  registerWebPushSubscription,
+  unsubscribeWebPush,
+  getWebPushSubscriptionStatus,
+  sendTestWebPush,
+  triggerManualSync,
+  type WorkerStatusResponse
+} from '../services/pipelineClient';
 
 interface SettingsViewProps {
   syncState: DatasetSyncState;
   onRefreshFeed: () => void;
   canInstallPwa: boolean;
   onInstallPwa: () => void;
+  onNavigateToWatchlist?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   syncState,
   onRefreshFeed,
   canInstallPwa,
-  onInstallPwa
+  onInstallPwa,
+  onNavigateToWatchlist
 }) => {
+  const [workerStatus, setWorkerStatus] = useState<WorkerStatusResponse | null>(null);
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [isSubscribingPush, setIsSubscribingPush] = useState(false);
+  const [isTriggeringSync, setIsTriggeringSync] = useState(false);
+  const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchWorkerStatus().then((s) => {
+      if (s) setWorkerStatus(s);
+    });
+    getWebPushSubscriptionStatus().then(setIsPushSubscribed);
+  }, []);
+
+  const handleTogglePush = async () => {
+    setIsSubscribingPush(true);
+    setTestPushStatus(null);
+    try {
+      if (isPushSubscribed) {
+        await unsubscribeWebPush();
+        setIsPushSubscribed(false);
+        setTestPushStatus('Web Push notifications disabled for this device.');
+      } else {
+        const res = await registerWebPushSubscription();
+        if (res.success) {
+          setIsPushSubscribed(true);
+          setTestPushStatus('Successfully subscribed to Canadian Recall Web Push notifications!');
+        } else {
+          setTestPushStatus(`Subscription error: ${res.error}`);
+        }
+      }
+      // Refresh status
+      const updated = await fetchWorkerStatus();
+      if (updated) setWorkerStatus(updated);
+    } finally {
+      setIsSubscribingPush(false);
+    }
+  };
+
+  const handleSendTestPush = async () => {
+    setTestPushStatus('Dispatching test Web Push notification...');
+    const res = await sendTestWebPush();
+    if (res.success) {
+      setTestPushStatus('Test notification sent! Check your device or notification tray.');
+    } else {
+      setTestPushStatus(`Test failed: ${res.error}`);
+    }
+  };
+
+  const handleTriggerManualSync = async () => {
+    setIsTriggeringSync(true);
+    setSyncFeedback('Running 6-hour sync pipeline against Health Canada feed...');
+    try {
+      const res = await triggerManualSync({ forceAll: true });
+      if (res.success && res.summary) {
+        setSyncFeedback(
+          `Sync completed in ${res.summary.durationMs}ms: Ingested ${res.summary.recordsIngested} recalls, found ${res.summary.userMatchesFound} watchlist match(es), dispatched ${res.summary.pushNotificationsDispatched} push alert(s).`
+        );
+      } else {
+        setSyncFeedback(`Sync error: ${res.error || 'Unknown error'}`);
+      }
+      const updated = await fetchWorkerStatus();
+      if (updated) setWorkerStatus(updated);
+    } finally {
+      setIsTriggeringSync(false);
+    }
+  };
+
   const handleClearCache = async () => {
     if (confirm('Clear offline recall cache from IndexedDB?')) {
       await recallStorage.clear();
@@ -31,7 +117,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const formatSyncTime = (timestamp: number | null) => {
+  const formatSyncTime = (timestamp: number | null | undefined) => {
     if (!timestamp) return 'Never';
     return new Date(timestamp).toLocaleDateString(undefined, {
       month: 'short',
@@ -45,7 +131,156 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     <div className="space-y-4 text-left animate-in fade-in duration-200">
       <div>
         <h2 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight">App Settings</h2>
-        <p className="text-xs md:text-sm text-slate-500 mt-0.5">Offline database, AI recognition & system info</p>
+        <p className="text-xs md:text-sm text-slate-500 mt-0.5">
+          6-hour background sync worker, Web Push notifications & offline database
+        </p>
+      </div>
+
+      {/* 6-HOUR BACKGROUND SYNC WORKER CARD */}
+      <div className="p-4 sm:p-5 bg-white rounded-2xl border border-red-200/90 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-red-50 text-red-600 rounded-xl">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-extrabold text-sm md:text-base text-slate-900">
+                  6-Hour Background Sync Worker
+                </h4>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-emerald-100 text-emerald-800">
+                  Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-mono">
+                Cron: <strong className="text-slate-800">0 */6 * * *</strong> (Every 6 hours)
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleTriggerManualSync}
+            disabled={isTriggeringSync}
+            className="py-2 px-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-60 shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isTriggeringSync ? 'animate-spin' : ''}`} />
+            <span>{isTriggeringSync ? 'Running Sync...' : 'Trigger 6h Sync Now'}</span>
+          </button>
+        </div>
+
+        {/* Worker Metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-100 text-xs">
+          <div>
+            <span className="text-slate-500 block text-[11px]">Last Sync Run</span>
+            <strong className="text-slate-900">{formatSyncTime(workerStatus?.lastRunAt)}</strong>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[11px]">Next Scheduled</span>
+            <strong className="text-slate-900">{formatSyncTime(workerStatus?.nextRunAt)}</strong>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[11px]">Deduplicated Store</span>
+            <strong className="text-slate-900 font-mono">
+              {workerStatus ? workerStatus.processedRecallsCount.toLocaleString() : 'Loading...'}
+            </strong>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[11px]">Active Watchlist</span>
+            <strong className="text-slate-900 font-mono">
+              {workerStatus ? `${workerStatus.watchlistCount} items` : 'Loading...'}
+            </strong>
+          </div>
+        </div>
+
+        {syncFeedback && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 font-medium">
+            {syncFeedback}
+          </div>
+        )}
+
+        <div className="text-[11px] text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-slate-100">
+          <span>
+            Pulls Health Canada updates modified in the last 24h & deduplicates against{' '}
+            <code className="text-slate-700 font-mono">processed_recalls</code>.
+          </span>
+          {onNavigateToWatchlist && (
+            <button
+              type="button"
+              onClick={onNavigateToWatchlist}
+              className="text-red-600 font-bold hover:underline shrink-0 text-left"
+            >
+              Manage Watchlist →
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* WEB PUSH API & NOTIFICATIONS CARD */}
+      <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
+              <BellRing className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-bold text-sm md:text-base text-slate-900">
+                PWA Web Push Notifications
+              </h4>
+              <p className="text-xs text-slate-500">
+                Receive instant alerts with deep links to official Canada safety recall notices
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleTogglePush}
+              disabled={isSubscribingPush}
+              className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs ${
+                isPushSubscribed
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  : 'bg-red-600 hover:bg-red-700 text-white'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>{isPushSubscribed ? 'Subscribed (Turn Off)' : 'Enable Web Push'}</span>
+            </button>
+            {isPushSubscribed && (
+              <button
+                type="button"
+                onClick={handleSendTestPush}
+                className="py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                title="Send test push to device"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Test Push</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {testPushStatus && (
+          <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 font-medium">
+            {testPushStatus}
+          </div>
+        )}
+
+        <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] text-slate-600 space-y-1">
+          <div className="flex justify-between">
+            <span>RFC 8291 / 8292 VAPID Status:</span>
+            <span className="font-semibold text-emerald-600">Configured & Active</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Expired Subscription Cleanup:</span>
+            <span className="text-slate-800 font-medium">Automatic on HTTP 404/410 Gone</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Deep Link Destination:</span>
+            <span className="text-slate-800 font-mono">/recalls/:id</span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 md:gap-4">
@@ -99,7 +334,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* AI Recognition Engine Card (Clean, no API key details) */}
+        {/* AI Recognition Engine Card */}
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5 flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -131,7 +366,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {/* PWA Install Card */}
       {canInstallPwa && (
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl shadow-sm flex items-center justify-between">
+        <div className="p-4 sm:p-5 bg-linear-to-r from-red-600 to-red-700 text-white rounded-2xl shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Download className="w-6 h-6 text-amber-300" />
             <div>

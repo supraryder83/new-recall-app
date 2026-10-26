@@ -15,10 +15,13 @@ import {
   BellRing,
   RefreshCw,
   CheckCircle2,
-  Shield
+  Shield,
+  BookmarkPlus,
+  BookmarkCheck
 } from 'lucide-react';
 import type { RecallItem, ScanHistoryItem } from '../types/recall';
 import { getScanHistory } from '../services/scanHistory';
+import { addWatchlistItem } from '../services/pipelineClient';
 import {
   checkHistoryAgainstRecalls,
   getLastHistoryCheckTime,
@@ -151,6 +154,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [isVerifyingNow, setIsVerifyingNow] = useState(false);
   const [verificationFeedback, setVerificationFeedback] = useState<string | null>(null);
   const [notificationsGranted, setNotificationsGranted] = useState(false);
+  const [watchedIds, setWatchedIds] = useState<Set<string>>(new Set());
 
   // Load history, check timestamps, notification records & permissions
   useEffect(() => {
@@ -610,6 +614,38 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                 {/* Right Section: Actions */}
                 <div className="flex items-center gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 min-w-0">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await addWatchlistItem({
+                        productName: item.identifiedTitle,
+                        brand: item.extractedInfo?.brand || '',
+                        modelNumber: item.extractedInfo?.modelOrLot || item.extractedInfo?.modelOrBatchNumber,
+                        upcBarcode: item.extractedInfo?.upcOrCode,
+                        keywords: item.searchKeywords ? item.searchKeywords.split(' ') : undefined
+                      });
+                      setWatchedIds((prev) => new Set([...prev, item.id]));
+                    }}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shrink-0 ${
+                      watchedIds.has(item.id)
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                    title="Add product to 6-hour background sync watchlist"
+                  >
+                    {watchedIds.has(item.id) ? (
+                      <>
+                        <BookmarkCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="hidden sm:inline">Watching</span>
+                      </>
+                    ) : (
+                      <>
+                        <BookmarkPlus className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Watch</span>
+                      </>
+                    )}
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {

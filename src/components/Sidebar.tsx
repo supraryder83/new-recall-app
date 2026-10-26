@@ -8,7 +8,8 @@ import {
   Download,
   Database,
   ExternalLink,
-  History
+  History,
+  BookmarkCheck
 } from 'lucide-react';
 import { CanadaLogo } from './CanadaLogo';
 import type { DatasetSyncState } from '../types/recall';
@@ -111,6 +112,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>Categories</span>
             </div>
             <span className="text-[10px] text-slate-400">4 Depts</span>
+          </button>
+
+          {/* Watchlist */}
+          <button
+            type="button"
+            onClick={() => onTabChange('watchlist')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${
+              currentTab === 'watchlist'
+                ? 'bg-red-50 text-red-600 font-extrabold'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <BookmarkCheck
+                className={`w-4 h-4 ${currentTab === 'watchlist' ? 'text-red-600' : 'text-slate-400'}`}
+              />
+              <span>Watchlist</span>
+            </div>
+            <span className="text-[10px] text-red-600 bg-red-50 font-bold px-1.5 py-0.5 rounded">6h Sync</span>
           </button>
 
           {/* Scan History */}
