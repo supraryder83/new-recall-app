@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   History,
-  Barcode,
+  Camera,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -264,8 +264,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             onClick={onOpenScanner}
             className="flex-1 sm:flex-initial px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap min-w-0"
           >
-            <Barcode className="w-4 h-4 shrink-0" />
-            <span>Scan Barcode</span>
+            <Camera className="w-4 h-4 shrink-0" />
+            <span>Scan Item</span>
           </button>
         </div>
       </div>
@@ -445,12 +445,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       {totalScans === 0 ? (
         <div className="py-14 sm:py-16 px-4 sm:px-6 text-center bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 space-y-4 shadow-xs max-w-full min-w-0 overflow-hidden">
           <div className="w-16 h-16 mx-auto bg-red-50 text-red-600 rounded-3xl flex items-center justify-center shadow-inner">
-            <Barcode className="w-8 h-8 animate-pulse-subtle" />
+            <Camera className="w-8 h-8 animate-pulse-subtle" />
           </div>
           <div className="max-w-md mx-auto space-y-1.5 min-w-0">
             <h3 className="font-extrabold text-lg text-slate-900 break-words">No Product Scans Yet</h3>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed break-words [overflow-wrap:anywhere]">
-              When you scan a barcode or photograph any product, serial number, or model code, the system will identify it, check for active Canadian recalls, and save it to your permanent safety log for continuous 6-hour monitoring.
+              When you photograph an item and its serial / model number tag, the system will identify it, check for active Canadian safety recalls, and save it to your permanent safety log for continuous 6-hour monitoring.
             </p>
           </div>
           <button
@@ -458,8 +458,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             onClick={onOpenScanner}
             className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs sm:text-sm font-extrabold transition-all shadow-md shadow-red-600/30 inline-flex items-center justify-center gap-2 active:scale-95 whitespace-nowrap"
           >
-            <Barcode className="w-4 h-4" />
-            <span>Scan Your First Barcode</span>
+            <Camera className="w-4 h-4" />
+            <span>Scan Your First Product</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>

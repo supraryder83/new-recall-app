@@ -43,14 +43,18 @@ export function addScanToHistory(
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (e: any) {
     console.warn('Failed to write scan history directly, attempting quota cleanup:', e);
-    // If quota exceeded, strip imagePreview from older items to save space
+    // If quota exceeded, strip image previews from older items to save space
     try {
-      const stripped = updated.map((it, idx) => (idx > 5 ? { ...it, imagePreview: undefined } : it));
+      const stripped = updated.map((it, idx) =>
+        idx > 5 ? { ...it, imagePreview: undefined, tagImagePreview: undefined } : it
+      );
       localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
     } catch {
       // Last resort: keep top 10 items without images
       try {
-        const minimal = updated.slice(0, 10).map((it) => ({ ...it, imagePreview: undefined }));
+        const minimal = updated
+          .slice(0, 10)
+          .map((it) => ({ ...it, imagePreview: undefined, tagImagePreview: undefined }));
         localStorage.setItem(STORAGE_KEY, JSON.stringify(minimal));
       } catch {}
     }

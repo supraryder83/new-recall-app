@@ -4,7 +4,7 @@ import {
   RefreshCw,
   Search,
   ChevronDown,
-  Barcode,
+  Camera,
   BellRing
 } from 'lucide-react';
 import type { RecallItem, CategoryFilter, DatasetSyncState, ScanHistoryItem } from './types/recall';
@@ -308,8 +308,8 @@ export const App: React.FC = () => {
               onClick={() => setIsScannerOpen(true)}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2"
             >
-              <Barcode className="w-3.5 h-3.5" />
-              <span>Scan Barcode</span>
+              <Camera className="w-3.5 h-3.5" />
+              <span>Scan Item</span>
             </button>
           </div>
         </div>

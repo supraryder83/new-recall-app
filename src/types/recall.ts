@@ -32,6 +32,7 @@ export interface GeminiExtractionResult {
   packageSize?: string;
   modelOrLot?: string;
   modelOrBatchNumber?: string;
+  serialNumber?: string;
   searchKeywords?: string;
   detectedCategory?: string;
   upcOrCode?: string;
@@ -42,10 +43,12 @@ export interface GeminiExtractionResult {
 export interface ScanMatchResult {
   verdict: 'MATCH_FOUND' | 'NO_RECALL_FOUND' | 'POSSIBLE_MATCH';
   query: string;
-  searchType: 'barcode' | 'vision';
+  searchType: 'camera' | 'vision' | 'barcode';
   identifiedTitle?: string;
   searchKeywords?: string;
   extractedInfo?: GeminiExtractionResult;
+  itemImage?: string;
+  tagImage?: string;
   matchedRecalls: RecallItem[]; // Exact product matches only
   similarProductRecalls?: RecallItem[]; // Recalls for similar variations/models
   relatedBrandRecalls?: RecallItem[]; // Recalls for other products from the same brand
@@ -65,6 +68,7 @@ export interface ScanHistoryItem {
   id: string;
   timestamp: number;
   imagePreview?: string;
+  tagImagePreview?: string;
   identifiedTitle: string;
   verdict: 'MATCH_FOUND' | 'NO_RECALL_FOUND' | 'POSSIBLE_MATCH';
   matchReason?: string;

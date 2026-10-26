@@ -84,17 +84,28 @@ export function getMaskedApiKey(): string {
 }
 
 export interface AnalyzeImageOptions {
-  base64Data: string;
-  mimeType: string;
+  base64Data?: string;
+  mimeType?: string;
+  itemImage?: {
+    base64Data: string;
+    mimeType?: string;
+  };
+  tagImage?: {
+    base64Data: string;
+    mimeType?: string;
+  };
   recallsDataset: RecallItem[];
 }
 
 /**
- * Send product image to Gemini 3.5 Flash Lite to extract identifiers and cross reference recalls
+ * Send 2 product photos (overall item + up-close serial/model tag) to Gemini 3.5 Flash Lite
+ * to extract identifiers and cross reference Canadian safety recalls.
  */
 export async function analyzeProductImageWithGemini({
   base64Data,
-  mimeType,
+  mimeType = 'image/jpeg',
+  itemImage,
+  tagImage,
   recallsDataset
 }: AnalyzeImageOptions): Promise<ScanMatchResult> {
   const apiKey = getGeminiApiKey();
@@ -102,55 +113,83 @@ export async function analyzeProductImageWithGemini({
     throw new Error('API key is missing. Please ensure your API key is configured in settings or .env file.');
   }
 
-  // Strip data:image/...;base64, prefix if present
-  let cleanBase64 = base64Data;
-  if (cleanBase64.includes('base64,')) {
-    cleanBase64 = cleanBase64.split('base64,')[1];
+  // Extract clean base64 data for item photo (Photo 1)
+  const rawItemData = itemImage?.base64Data || base64Data || '';
+  let cleanItemBase64 = rawItemData;
+  if (cleanItemBase64.includes('base64,')) {
+    cleanItemBase64 = cleanItemBase64.split('base64,')[1];
+  }
+  const itemMime = itemImage?.mimeType || mimeType || 'image/jpeg';
+
+  // Extract clean base64 data for tag photo (Photo 2) if provided
+  const rawTagData = tagImage?.base64Data || '';
+  let cleanTagBase64 = rawTagData;
+  if (cleanTagBase64.includes('base64,')) {
+    cleanTagBase64 = cleanTagBase64.split('base64,')[1];
+  }
+  const tagMime = tagImage?.mimeType || 'image/jpeg';
+
+  if (!cleanItemBase64 && !cleanTagBase64) {
+    throw new Error('No product photo provided for analysis.');
   }
 
   const promptText = `
 You are an expert product safety investigator for the Canadian Recall & Safety Alerts database (Health Canada, CFIA, Transport Canada).
-Examine this product packaging image, label, logo, or barcode with extreme forensic precision.
+You are analyzing ${cleanTagBase64 ? 'TWO forensic photos of a product: Photo 1 is the overall commercial item/packaging, and Photo 2 is an up-close capture of the serial number (SN), model number, rating plate, or tag.' : 'a photo of the product/label.'}
 
-Your goal is to identify the EXACT commercial product shown in the picture so it can be accurately cross-referenced against the Canadian recall database without false positive matches.
+Your mission is to extract the EXACT manufacturer, product line, model number, serial number (SN), and lot/batch code so this item can be verified against the official Canadian recall database with zero false positives.
+
+Carefully inspect:
+1. OVERALL ITEM (Photo 1): Identify the exact brand, product type, form factor, color, edition, and commercial name.
+${cleanTagBase64 ? '2. SERIAL & MODEL TAG (Photo 2): Read the exact model number, model code, serial number (SN), date code, lot number, certification numbers, or UPC printed on the rating label, tag, or engraved plate.' : '2. Look for any visible model numbers, serial numbers, lot codes, or barcodes on the packaging.'}
 
 Extract and return a JSON object with EXACTLY this structure:
 {
-  "brand": "Exact manufacturer or brand name visible (e.g. 'Plantropy', 'Great Value', 'Nestlé', 'Kirkland Signature', 'Campbell\\'s', 'Ford', or empty if unknown)",
-  "productName": "Exact commercial product name including specific line, flavor, or edition (e.g. 'Jack\\'d Up Bites Jalapeño & Cheddar', 'Cream of Mushroom Condensed Soup', 'Cheerios Honey Nut', 'Tylenol Extra Strength 500mg', 'F-150 SuperCrew')",
-  "flavorOrVariant": "Specific flavor, scent, sub-type, or variety (e.g. 'Jalapeño & Cheddar', 'Vanilla', 'Unsweetened', '2% Milk', 'Extra Strength', or empty if none)",
-  "packageSize": "Package net weight, volume, or count if visible (e.g. '150 g', '355 mL', '6 pack', or empty)",
+  "brand": "Exact manufacturer or brand name (e.g. 'Dyson', 'DeWalt', 'Samsung', 'LG', 'Plantropy', 'Great Value', 'Honda', 'Fisher-Price')",
+  "productName": "Exact commercial product name including edition or line (e.g. 'V11 Animal Cordless Vacuum', '20V MAX Cordless Drill', 'Jack\\'d Up Bites Jalapeño & Cheddar')",
+  "modelOrLot": "Exact model number or lot code visible on the tag or packaging (e.g. 'DCD771C2', 'SV14', 'LOT 2024-08-A', or empty if none)",
+  "serialNumber": "Exact serial number (SN) if visible on the tag (e.g. 'SN 98472910384', or empty if none)",
+  "flavorOrVariant": "Specific variant, flavor, size, or sub-model if applicable",
+  "packageSize": "Package net weight, volume, or dimensions if visible",
   "category": "One of: Food, Consumer Products, Health/Medical, Vehicles, Other",
-  "modelOrLot": "Exact model number, lot code, batch number, expiry date, or VIN if visible (or empty if none)",
-  "upcOrCode": "UPC or barcode numbers if visible or readable in the image, or empty",
-  "searchKeywords": "2 to 4 distinctive compound keywords for exact recall lookup (e.g. 'Plantropy Jack\\'d Up Bites Jalapeno' or 'JKMAX heated blanket')",
-  "confidenceNotes": "Brief 1-sentence note of what was observed on the packaging"
+  "upcOrCode": "UPC or barcode numbers if readable, or empty",
+  "searchKeywords": "2 to 4 distinctive compound keywords for exact recall lookup (e.g. 'Dyson V11 vacuum' or 'DeWalt DCD771 drill')",
+  "confidenceNotes": "Brief 1-sentence note of what was observed across the photos"
 }
 
 Important:
 - Return ONLY valid JSON. Do not wrap in markdown fences or backticks.
-- Be precise: identify the EXACT product, brand, and flavor/variant shown. Do not use generic one-word descriptions like 'snack' or 'car' or 'shampoo'.
+- Be forensic: prioritize the model number and serial number from the up-close tag photo whenever available.
 `;
+
+  const parts: any[] = [{ text: promptText }];
+
+  // Photo 1: Overall Item
+  if (cleanItemBase64) {
+    parts.push({
+      inlineData: {
+        mimeType: itemMime,
+        data: cleanItemBase64
+      }
+    });
+  }
+
+  // Photo 2: Up-close SN & Model Tag
+  if (cleanTagBase64) {
+    parts.push({
+      inlineData: {
+        mimeType: tagMime,
+        data: cleanTagBase64
+      }
+    });
+  }
 
   const ai = new GoogleGenAI({ apiKey });
 
   try {
     const response = await ai.models.generateContent({
       model: GEMINI_VISION_MODEL,
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: promptText },
-            {
-              inlineData: {
-                mimeType: mimeType || 'image/jpeg',
-                data: cleanBase64
-              }
-            }
-          ]
-        }
-      ],
+      contents: [{ role: 'user', parts }],
       config: {
         responseMimeType: 'application/json',
         temperature: 0.1
@@ -165,7 +204,7 @@ Important:
       parsed = JSON.parse(cleanJson);
     } catch (parseErr) {
       console.error('Failed to parse AI recognition JSON output:', parseErr, rawText);
-      throw new Error('Failed to interpret recognition response. Please try again with a clear photo of the barcode or serial number.');
+      throw new Error('Failed to interpret recognition response. Please try again with clear photos of the item and model tag.');
     }
 
     const extraction: GeminiExtractionResult = {
@@ -176,15 +215,22 @@ Important:
       packageSize: parsed.packageSize || '',
       modelOrLot: parsed.modelOrLot || parsed.modelOrBatchNumber || '',
       modelOrBatchNumber: parsed.modelOrLot || parsed.modelOrBatchNumber || '',
+      serialNumber: parsed.serialNumber || '',
       detectedCategory: parsed.category || parsed.detectedCategory || 'Other',
-      searchKeywords: parsed.searchKeywords || [parsed.brand, parsed.productName].filter(Boolean).join(' '),
+      searchKeywords: parsed.searchKeywords || [parsed.brand, parsed.productName, parsed.modelOrLot].filter(Boolean).join(' '),
       upcOrCode: parsed.upcOrCode || '',
       confidenceNotes: parsed.confidenceNotes || '',
       isSpecificProduct: Boolean(parsed.brand || parsed.productName)
     };
 
     // Cross-reference extracted details against the Canadian recall dataset with forensic scoring
-    return crossReferenceRecallDataset(extraction, recallsDataset);
+    const matchResult = crossReferenceRecallDataset(extraction, recallsDataset);
+    return {
+      ...matchResult,
+      searchType: 'camera',
+      itemImage: rawItemData || undefined,
+      tagImage: rawTagData || undefined
+    };
   } catch (err: any) {
     console.error('Vision analysis error:', err);
     if (err?.message?.includes('API_KEY_INVALID') || err?.status === 400 || err?.status === 403) {
@@ -425,9 +471,23 @@ export function crossReferenceRecallDataset(
         : false;
 
     // 3. Model / batch exact match (95% confidence)
-    if (cleanModel.length >= 4 && !GENERIC_STOPWORDS.has(cleanModel)) {
+    if (cleanModel.length >= 3 && !GENERIC_STOPWORDS.has(cleanModel)) {
       if ((itemProduct.includes(cleanModel) || itemTitle.includes(cleanModel)) && (brandMatches || !cleanBrand)) {
         exactCandidates.push({ item, score: 95, matchType: 'model' });
+        continue;
+      }
+    }
+
+    // 3b. Serial number exact match (98% confidence)
+    const cleanSerial = normalizeClean(extracted.serialNumber || '');
+    if (cleanSerial.length >= 4 && !GENERIC_STOPWORDS.has(cleanSerial)) {
+      if (
+        (itemProduct.includes(cleanSerial) ||
+          itemTitle.includes(cleanSerial) ||
+          (item['What you should do'] && normalizeClean(item['What you should do']).includes(cleanSerial))) &&
+        (brandMatches || !cleanBrand)
+      ) {
+        exactCandidates.push({ item, score: 98, matchType: 'model' });
         continue;
       }
     }
