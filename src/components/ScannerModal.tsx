@@ -26,6 +26,7 @@ import {
 } from '../services/gemini';
 import { optimizeImage } from '../utils/imageOptimizer';
 import { addScanToHistory } from '../services/scanHistory';
+import { recordNotifiedRecall } from '../services/historyMonitor';
 
 interface ScannerModalProps {
   isOpen: boolean;
@@ -412,7 +413,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
       setScanResult(result);
 
       // Save scan to persistent history log
-      addScanToHistory({
+      const savedItem = addScanToHistory({
         imagePreview: base64Image,
         identifiedTitle: result.identifiedTitle || 'Product Scan',
         verdict: result.verdict,
@@ -422,6 +423,21 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
         matchedRecalls: result.matchedRecalls,
         searchKeywords: result.searchKeywords
       });
+
+      // Record any recalls already identified at scan time so 6-hour monitor only notifies about NEW recalls
+      if (result.matchedRecalls && result.matchedRecalls.length > 0) {
+        for (const recall of result.matchedRecalls) {
+          recordNotifiedRecall({
+            key: `${savedItem.id}_${recall.NID}`,
+            itemId: savedItem.id,
+            itemTitle: savedItem.identifiedTitle,
+            recallNid: recall.NID,
+            recallTitle: recall.Title,
+            hazard: recall.Issue,
+            notifiedAt: Date.now()
+          });
+        }
+      }
 
       if (result.verdict === 'NO_RECALL_FOUND') {
         confetti({

@@ -4,7 +4,17 @@ import { crossReferenceRecallDataset } from './gemini';
 
 export const SIX_HOURS_MS = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
 const LAST_CHECK_KEY = 'canada_recall_history_last_check_ts';
-const NOTIFIED_NIDS_KEY = 'canada_recall_history_notified_nids';
+const NOTIFIED_RECORDS_KEY = 'canada_recall_history_notified_records_v2';
+
+export interface NotifiedRecallRecord {
+  key: string; // Composite unique key: `${itemId}_${recallNid}`
+  itemId: string;
+  itemTitle: string;
+  recallNid: string;
+  recallTitle: string;
+  hazard?: string;
+  notifiedAt: number;
+}
 
 export interface HistoryCheckResult {
   checkedCount: number;
@@ -81,7 +91,7 @@ export async function sendRecallSystemNotification(
     renotify: true
   };
 
-  // Try service worker notification first (better on mobile PWAs)
+  // Try service worker notification first (best on mobile PWAs)
   try {
     if ('serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.ready;
@@ -109,30 +119,56 @@ export async function sendRecallSystemNotification(
 }
 
 /**
- * Retrieve set of Recall Notice IDs (NIDs) that we have already notified the user about
+ * Retrieve the persistent list of all recall notices we have already notified the user about
  */
-function getNotifiedNidSet(): Set<string> {
-  if (typeof window === 'undefined' || !window.localStorage) return new Set();
+export function getNotifiedRecallRecords(): NotifiedRecallRecord[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
   try {
-    const raw = localStorage.getItem(NOTIFIED_NIDS_KEY);
-    if (!raw) return new Set();
+    const raw = localStorage.getItem(NOTIFIED_RECORDS_KEY);
+    if (!raw) return [];
     const arr = JSON.parse(raw);
-    return new Set(Array.isArray(arr) ? arr : []);
+    return Array.isArray(arr) ? arr : [];
   } catch {
-    return new Set();
+    return [];
   }
 }
 
-function saveNotifiedNidSet(nids: Set<string>): void {
-  if (typeof window === 'undefined' || !window.localStorage) return;
-  try {
-    localStorage.setItem(NOTIFIED_NIDS_KEY, JSON.stringify(Array.from(nids).slice(-200)));
-  } catch {}
+/**
+ * Check if the user has ALREADY been notified about a specific recall for a scanned item.
+ * Prevents sending repeated notifications for the same recall.
+ */
+export function hasRecallBeenNotified(itemId: string, recallNid: string): boolean {
+  const records = getNotifiedRecallRecords();
+  const searchKey = `${itemId}_${recallNid}`;
+  return records.some(
+    (r) => r.key === searchKey || (r.itemId === itemId && r.recallNid === recallNid)
+  );
 }
 
 /**
- * Checks all recorded products in history against the Canadian safety recall database.
- * If any product matches a new recall notice, updates history and sends safety notifications.
+ * Record a recall notification so that the system never notifies about this item/recall again.
+ */
+export function recordNotifiedRecall(record: NotifiedRecallRecord): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const current = getNotifiedRecallRecords();
+    const searchKey = record.key || `${record.itemId}_${record.recallNid}`;
+    if (current.some((r) => r.key === searchKey)) {
+      return; // Already recorded
+    }
+    const updated = [record, ...current].slice(0, 1000); // Preserve up to 1000 historical notification records
+    localStorage.setItem(NOTIFIED_RECORDS_KEY, JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('recall-notified-records-updated'));
+    }
+  } catch (err) {
+    console.warn('Failed to save notified recall record:', err);
+  }
+}
+
+/**
+ * Checks ONLY the items that are present in your scan history against the Canadian safety recall database.
+ * Tracks recalls it notified you about in a notification, and never notifies about that item again (only new recalls).
  */
 export async function checkHistoryAgainstRecalls(
   recallsDataset: RecallItem[],
@@ -151,6 +187,7 @@ export async function checkHistoryAgainstRecalls(
     };
   }
 
+  // ALWAYS and ONLY check the list of items the user scanned that are in the persistent history log
   const history = getScanHistory();
   if (!history || history.length === 0 || !recallsDataset || recallsDataset.length === 0) {
     try {
@@ -164,12 +201,11 @@ export async function checkHistoryAgainstRecalls(
     };
   }
 
-  const notifiedNids = getNotifiedNidSet();
   const updatedHistoryItems: ScanHistoryItem[] = [];
   const newlyRecalledItems: { historyItem: ScanHistoryItem; recall: RecallItem }[] = [];
 
   for (const item of history) {
-    // Construct extraction details for cross-referencing
+    // Cross-reference this specific scanned product against the recall registry
     const extraction = item.extractedInfo || {
       brand: '',
       productName: item.identifiedTitle,
@@ -181,14 +217,26 @@ export async function checkHistoryAgainstRecalls(
     const hasMatches = matchResult.matchedRecalls.length > 0;
     const wasSafe = item.verdict === 'NO_RECALL_FOUND';
 
-    let isNewRecallForThisItem = false;
+    let itemHasNewNotification = false;
 
     if (hasMatches) {
       for (const recall of matchResult.matchedRecalls) {
-        if (!notifiedNids.has(recall.NID)) {
-          notifiedNids.add(recall.NID);
-          isNewRecallForThisItem = true;
+        // Check if we have ALREADY notified the user about this recall for this item
+        if (!hasRecallBeenNotified(item.id, recall.NID)) {
+          // Brand new recall for this item! Add to newly recalled list for notification
+          itemHasNewNotification = true;
           newlyRecalledItems.push({ historyItem: item, recall });
+
+          // Immediately record so duplicate notifications are NEVER sent for this recall/item
+          recordNotifiedRecall({
+            key: `${item.id}_${recall.NID}`,
+            itemId: item.id,
+            itemTitle: item.identifiedTitle,
+            recallNid: recall.NID,
+            recallTitle: recall.Title,
+            hazard: recall.Issue,
+            notifiedAt: now
+          });
         }
       }
     }
@@ -200,20 +248,19 @@ export async function checkHistoryAgainstRecalls(
       matchedRecallsCount: matchResult.matchedRecalls.length,
       matchReason: matchResult.matchReason,
       lastCheckedAt: now,
-      isNewlyRecalled: isNewRecallForThisItem || (wasSafe && hasMatches)
+      isNewlyRecalled: itemHasNewNotification || (wasSafe && hasMatches)
     };
 
     updatedHistoryItems.push(updatedItem);
   }
 
-  // Persist updated history & notified records
+  // Persist updated history items with new check timestamps and verdicts
   updateMultipleScansInHistory(updatedHistoryItems);
-  saveNotifiedNidSet(notifiedNids);
   try {
     localStorage.setItem(LAST_CHECK_KEY, String(now));
   } catch {}
 
-  // Send system notifications for any newly matched recalls
+  // Send system push notification for any brand-new recall notices
   if (newlyRecalledItems.length > 0) {
     for (const { historyItem, recall } of newlyRecalledItems) {
       const title = `🚨 Canada Recall Alert: ${historyItem.identifiedTitle}`;
@@ -234,7 +281,7 @@ export async function checkHistoryAgainstRecalls(
     }
   }
 
-  // Notify listeners that check finished
+  // Notify listeners that 6-hour check completed
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent('recall-monitoring-check-completed', {
@@ -257,31 +304,34 @@ export async function checkHistoryAgainstRecalls(
 
 /**
  * Initializes the recurring 6-hour background verification monitor.
- * Runs on startup if due, and periodically evaluates every 5 minutes.
+ * Runs on startup automatically if due (or never run), and periodically evaluates every 1 minute.
  */
 export function startPeriodicHistoryMonitor(
   getRecallsDataset: () => RecallItem[]
 ): () => void {
-  // Check immediately if due or never run
+  // Check automatically on startup if due or never run before
   const initialDataset = getRecallsDataset();
   if (initialDataset && initialDataset.length > 0) {
-    checkHistoryAgainstRecalls(initialDataset, false).catch((err) =>
-      console.warn('Initial 6-hour history check error:', err)
-    );
+    const lastCheck = getLastHistoryCheckTime();
+    if (!lastCheck || Date.now() - lastCheck >= SIX_HOURS_MS) {
+      checkHistoryAgainstRecalls(initialDataset, false).catch((err) =>
+        console.warn('Automatic initial 6-hour history check error:', err)
+      );
+    }
   }
 
-  // Check every 5 minutes whether the 6-hour window has elapsed
+  // Check every 1 minute whether the 6-hour interval has elapsed
   const intervalId = window.setInterval(() => {
     const dataset = getRecallsDataset();
     if (dataset && dataset.length > 0) {
       const lastCheck = getLastHistoryCheckTime();
       if (!lastCheck || Date.now() - lastCheck >= SIX_HOURS_MS) {
         checkHistoryAgainstRecalls(dataset, false).catch((err) =>
-          console.warn('Scheduled 6-hour history check error:', err)
+          console.warn('Automatic scheduled 6-hour history check error:', err)
         );
       }
     }
-  }, 5 * 60 * 1000);
+  }, 60 * 1000);
 
   return () => {
     window.clearInterval(intervalId);

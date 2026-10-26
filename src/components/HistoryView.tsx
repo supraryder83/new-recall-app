@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   ChevronRight,
+  ChevronDown,
   Tag,
   ArrowRight,
   Clock,
@@ -24,7 +25,10 @@ import {
   getLastHistoryCheckTime,
   getNextHistoryCheckTime,
   hasNotificationPermission,
-  requestRecallNotificationPermission
+  requestRecallNotificationPermission,
+  getNotifiedRecallRecords,
+  hasRecallBeenNotified,
+  type NotifiedRecallRecord
 } from '../services/historyMonitor';
 
 interface HistoryViewProps {
@@ -141,16 +145,19 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   recallsDataset = []
 }) => {
   const [historyItems, setHistoryItems] = useState<ScanHistoryItem[]>([]);
+  const [notifiedRecords, setNotifiedRecords] = useState<NotifiedRecallRecord[]>([]);
+  const [showNotifiedLog, setShowNotifiedLog] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState<number | null>(null);
   const [nextCheckTime, setNextCheckTime] = useState<number>(Date.now());
   const [isVerifyingNow, setIsVerifyingNow] = useState(false);
   const [verificationFeedback, setVerificationFeedback] = useState<string | null>(null);
   const [notificationsGranted, setNotificationsGranted] = useState(false);
 
-  // Load history, check timestamps & notification permissions
+  // Load history, check timestamps, notification records & permissions
   useEffect(() => {
     const load = () => {
       setHistoryItems(getScanHistory());
+      setNotifiedRecords(getNotifiedRecallRecords());
       setLastCheckTime(getLastHistoryCheckTime());
       setNextCheckTime(getNextHistoryCheckTime());
       setNotificationsGranted(hasNotificationPermission());
@@ -160,10 +167,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     const handleUpdate = () => load();
     window.addEventListener('scan-history-updated', handleUpdate);
     window.addEventListener('recall-monitoring-check-completed', handleUpdate);
+    window.addEventListener('recall-notified-records-updated', handleUpdate);
 
     return () => {
       window.removeEventListener('scan-history-updated', handleUpdate);
       window.removeEventListener('recall-monitoring-check-completed', handleUpdate);
+      window.removeEventListener('recall-notified-records-updated', handleUpdate);
     };
   }, []);
 
@@ -194,14 +203,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       setLastCheckTime(result.timestamp);
       setNextCheckTime(getNextHistoryCheckTime());
       setHistoryItems(getScanHistory());
+      setNotifiedRecords(getNotifiedRecallRecords());
 
       if (result.newlyRecalledCount > 0) {
         setVerificationFeedback(
-          `⚠️ Safety check completed: ${result.newlyRecalledCount} product(s) flagged with active Canadian recalls!`
+          `⚠️ Safety check completed: ${result.newlyRecalledCount} product(s) in your history matched new Canadian recalls! Notification sent.`
         );
       } else {
         setVerificationFeedback(
-          `✅ 6-Hour verification complete: All ${result.checkedCount} scanned products checked against ${recallsDataset.length.toLocaleString()} Canadian recall notices. No new recalls detected.`
+          `✅ 6-Hour verification complete: All ${result.checkedCount} scanned products verified against ${recallsDataset.length.toLocaleString()} Canadian recall notices. No new recalls found.`
         );
       }
     } catch (err) {
@@ -279,7 +289,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                All photographed items in your history are automatically audited every 6 hours against Health Canada, CFIA, and Transport Canada safety databases. If an item you scanned is recalled in the future, you will receive an immediate notification.
+                Checks <strong>only the products in your scan history</strong> against Health Canada, CFIA, and Transport Canada safety databases every 6 hours. Recalls you are notified about are tracked to prevent duplicate alerts—only brand new recalls will trigger notifications.
               </p>
             </div>
           </div>
@@ -309,7 +319,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               onClick={handleVerifyNow}
               disabled={isVerifyingNow || totalScans === 0}
               className="px-3.5 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all border border-white/20 flex items-center gap-1.5 active:scale-95"
-              title="Run on-demand check against latest Canadian recall records"
+              title="Run on-demand check of history items against latest Canadian recall records"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isVerifyingNow ? 'animate-spin text-red-400' : ''}`} />
               <span>{isVerifyingNow ? 'Verifying...' : 'Verify Now'}</span>
@@ -324,7 +334,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
               <span>Last Checked:</span>
               <strong className="text-slate-200">
-                {lastCheckTime ? formatTimestamp(lastCheckTime) : 'Checking on schedule'}
+                {lastCheckTime ? formatTimestamp(lastCheckTime) : 'Checking automatically'}
               </strong>
             </span>
 
@@ -341,12 +351,56 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 )}
               </strong>
             </span>
+
+            {/* Notified recalls tracked counter */}
+            {notifiedRecords.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowNotifiedLog(!showNotifiedLog)}
+                className="flex items-center gap-1.5 text-slate-300 hover:text-white underline underline-offset-2"
+              >
+                <BellRing className="w-3.5 h-3.5 text-amber-400" />
+                <span>{notifiedRecords.length} Notification{notifiedRecords.length === 1 ? '' : 's'} Tracked</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${showNotifiedLog ? 'rotate-180' : ''}`} />
+              </button>
+            )}
           </div>
 
           <span className="text-[11px] text-slate-400 italic">
-            Scan history is permanently protected and never cleared
+            Scan history is permanent and cannot be cleared
           </span>
         </div>
+
+        {/* Expandable Sent Notifications Log */}
+        {showNotifiedLog && notifiedRecords.length > 0 && (
+          <div className="mt-3 p-4 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-2 text-xs animate-in fade-in">
+            <div className="flex items-center justify-between font-bold text-slate-200">
+              <span className="flex items-center gap-1.5">
+                <BellRing className="w-3.5 h-3.5 text-red-400" />
+                <span>Tracked Recall Notifications Log (No Duplicates)</span>
+              </span>
+              <span className="text-[11px] text-slate-400">
+                {notifiedRecords.length} item{notifiedRecords.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-700/50">
+              {notifiedRecords.map((rec) => (
+                <div key={rec.key} className="pt-2 first:pt-0 flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-200 truncate">{rec.itemTitle}</p>
+                    <p className="text-[11px] text-red-300 truncate">{rec.recallTitle}</p>
+                    {rec.hazard && (
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5">{rec.hazard}</p>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-400 shrink-0">
+                    {formatTimestamp(rec.notifiedAt)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* On-demand Feedback Banner */}
         {verificationFeedback && (
@@ -432,6 +486,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             const isPossible = item.verdict === 'POSSIBLE_MATCH';
             const isNewlyRecalled = item.isNewlyRecalled === true;
 
+            // Check if any matched recall on this item has been tracked as notified
+            const hasTrackedNotification =
+              item.matchedRecalls &&
+              item.matchedRecalls.length > 0 &&
+              item.matchedRecalls.some((rec) => hasRecallBeenNotified(item.id, rec.NID));
+
             return (
               <div
                 key={item.id}
@@ -494,6 +554,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       {isNewlyRecalled && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-red-600 text-white animate-pulse">
                           <span>🚨 Recalled After Scan</span>
+                        </span>
+                      )}
+
+                      {/* Notified Tracking Status Badge */}
+                      {hasTrackedNotification && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                          <BellRing className="w-3 h-3 text-slate-500" />
+                          <span>Notified (Logged)</span>
                         </span>
                       )}
 

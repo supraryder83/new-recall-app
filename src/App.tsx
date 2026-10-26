@@ -5,11 +5,15 @@ import {
   Search,
   ChevronDown,
   Sparkles,
-  Camera
+  Camera,
+  BellRing
 } from 'lucide-react';
 import type { RecallItem, CategoryFilter, DatasetSyncState, ScanHistoryItem } from './types/recall';
 import { fetchRecallsData, filterRecalls } from './services/recallData';
-import { startPeriodicHistoryMonitor } from './services/historyMonitor';
+import {
+  startPeriodicHistoryMonitor,
+  requestRecallNotificationPermission
+} from './services/historyMonitor';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { SearchAndFilters } from './components/SearchAndFilters';
@@ -78,6 +82,36 @@ export const App: React.FC = () => {
   const [monitoringAlerts, setMonitoringAlerts] = useState<
     { historyItem: ScanHistoryItem; recall: RecallItem }[]
   >([]);
+
+  // Notification permission state (automatically prompted on site visit)
+  const [notificationPermission, setNotificationPermission] = useState<string>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
+  const [dismissedNotificationBanner, setDismissedNotificationBanner] = useState(false);
+
+  // Automatically ask for notification permissions as soon as the user goes to the site
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        requestRecallNotificationPermission()
+          .then((perm) => {
+            if (perm !== 'unsupported') {
+              setNotificationPermission(perm);
+            }
+          })
+          .catch((err) => {
+            console.warn('Automatic notification permission request error:', err);
+          });
+      }
+    }
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    const perm = await requestRecallNotificationPermission();
+    if (perm !== 'unsupported') {
+      setNotificationPermission(perm);
+    }
+  };
 
   // Instant Load & Background Sync
   const loadData = useCallback(async (forceRefresh = false) => {
@@ -216,6 +250,47 @@ export const App: React.FC = () => {
               onInstall={handleInstallPwa}
               onDismiss={() => setShowInstallBanner(false)}
             />
+          )}
+
+          {/* Automatic Site Visit Notification Permission Banner */}
+          {notificationPermission === 'default' && !dismissedNotificationBanner && (
+            <div className="bg-linear-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 sm:p-5 rounded-3xl shadow-lg border border-red-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top duration-300">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2.5 bg-white/20 rounded-2xl shrink-0">
+                  <BellRing className="w-6 h-6 text-white animate-bounce-subtle" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-extrabold text-sm sm:text-base">
+                      Enable Canadian Recall Notifications
+                    </h4>
+                    <span className="text-[10px] font-extrabold bg-white/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      Automatic 6h Protection
+                    </span>
+                  </div>
+                  <p className="text-xs text-red-100 mt-1 leading-relaxed">
+                    Allow notifications to receive automatic alerts every 6 hours if any product in your scan history is recalled by Health Canada or CFIA.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <button
+                  type="button"
+                  onClick={handleEnableNotifications}
+                  className="px-4 py-2 bg-white text-red-700 hover:bg-red-50 text-xs font-extrabold rounded-xl transition-all shadow-xs active:scale-95"
+                >
+                  Allow Notifications
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDismissedNotificationBanner(true)}
+                  className="p-1.5 text-red-200 hover:text-white rounded-lg transition-colors"
+                  title="Dismiss notification prompt"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Urgent 6-Hour Safety Recall Alert Banner */}
