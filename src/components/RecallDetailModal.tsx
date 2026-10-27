@@ -1,13 +1,19 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   X,
   ExternalLink,
   ShieldAlert,
   Calendar,
   Share2,
-  Check
+  Check,
+  CheckCircle2
 } from 'lucide-react';
 import type { RecallItem } from '../types/recall';
+import { getScanHistory } from '../services/scanHistory';
+import {
+  isRecallNotificationAcknowledged,
+  acknowledgeRecallNotification
+} from '../services/historyMonitor';
 
 interface RecallDetailModalProps {
   recall: RecallItem | null;
@@ -16,7 +22,32 @@ interface RecallDetailModalProps {
 }
 
 export const RecallDetailModal: React.FC<RecallDetailModalProps> = ({ recall, isOpen, onClose }) => {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
+  const [localAcked, setLocalAcked] = useState(false);
+
+  const matchingHistoryItem = useMemo(() => {
+    if (!recall) return null;
+    const history = getScanHistory();
+    const cleanNid = String(recall.NID || (recall as any)['Recall number'] || '').trim();
+    return history.find(
+      (it) =>
+        it.matchedRecalls?.some(
+          (r) => String(r.NID || (r as any)['Recall number'] || '').trim() === cleanNid
+        )
+    );
+  }, [recall, localAcked]);
+
+  const isAlreadyAcknowledged = useMemo(() => {
+    if (!matchingHistoryItem || !recall) return false;
+    return localAcked || isRecallNotificationAcknowledged(matchingHistoryItem.id, recall);
+  }, [matchingHistoryItem, recall, localAcked]);
+
+  const handleAcknowledge = () => {
+    if (matchingHistoryItem && recall) {
+      acknowledgeRecallNotification(matchingHistoryItem.id, recall);
+      setLocalAcked(true);
+    }
+  };
 
   if (!isOpen || !recall) return null;
 
@@ -190,22 +221,42 @@ export const RecallDetailModal: React.FC<RecallDetailModalProps> = ({ recall, is
         </div>
 
         {/* Bottom Actions */}
-        <div className="px-5 sm:px-6 py-3.5 sm:py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0 pb-safe">
-          <button
-            type="button"
-            onClick={handleShare}
-            className="p-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-100 transition-colors shadow-xs"
-            title="Share recall notice"
-          >
-            {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
-          </button>
+        <div className="px-5 sm:px-6 py-3.5 sm:py-4 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0 pb-safe">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleShare}
+              className="p-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-100 transition-colors shadow-xs"
+              title="Share recall notice"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
+            </button>
+
+            {matchingHistoryItem && (
+              isAlreadyAcknowledged ? (
+                <span className="px-3 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 shadow-2xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>✓ Acknowledged in History</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleAcknowledge}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shadow-xs"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Acknowledge Recall</span>
+                </button>
+              )
+            )}
+          </div>
 
           {recall.URL && (
             <a
               href={recall.URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-colors"
+              className="flex-1 sm:flex-initial py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-colors"
             >
               <span>Canada.ca Official Notice</span>
               <ExternalLink className="w-4 h-4" />

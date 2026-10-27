@@ -217,11 +217,12 @@ export const App: React.FC = () => {
 
         // If newly recalled items detected on open, display recall info and sound alarm (unless already acknowledged)
         if (syncRes.newlyRecalledCount > 0 && syncRes.newlyRecalledItems.length > 0) {
-          const unacked = syncRes.newlyRecalledItems.find(
+          const unacked = syncRes.newlyRecalledItems.filter(
             ({ historyItem, recall }) => !isRecallNotificationAcknowledged(historyItem.id, recall)
           );
-          if (unacked) {
-            setEmergencyAlertItem(unacked);
+          if (unacked.length > 0) {
+            setMonitoringAlerts((prev) => [...unacked, ...prev]);
+            setEmergencyAlertItem(unacked[0]);
             playRecallAlarmSound(15);
           }
         }
@@ -267,11 +268,14 @@ export const App: React.FC = () => {
           const unackedRecall = it.matchedRecalls.find((rec) => !isRecallNotificationAcknowledged(it.id, rec));
           return unackedRecall ? { historyItem: it, recall: unackedRecall } : null;
         })
-        .find(Boolean);
+        .filter(Boolean) as { historyItem: ScanHistoryItem; recall: RecallItem }[];
 
-      if (unacknowledgedFlagged) {
-        setEmergencyAlertItem(unacknowledgedFlagged);
+      if (unacknowledgedFlagged.length > 0) {
+        setMonitoringAlerts(unacknowledgedFlagged);
+        setEmergencyAlertItem(unacknowledgedFlagged[0]);
         playRecallAlarmSound(15);
+      } else {
+        setMonitoringAlerts([]);
       }
     }
 
@@ -290,22 +294,51 @@ export const App: React.FC = () => {
     const handleRecallAlert = (e: any) => {
       const items = e.detail?.newlyRecalledItems;
       if (Array.isArray(items) && items.length > 0) {
-        setMonitoringAlerts((prev) => [...items, ...prev]);
-        const unackedItem = items.find(
+        const unacked = items.filter(
           ({ historyItem, recall }: any) => !isRecallNotificationAcknowledged(historyItem.id, recall)
         );
-        if (unackedItem) {
-          setEmergencyAlertItem(unackedItem);
+        if (unacked.length > 0) {
+          setMonitoringAlerts((prev) => [...unacked, ...prev]);
+          setEmergencyAlertItem(unacked[0]);
           playRecallAlarmSound(15);
         }
       }
     };
 
+    // Listen for acknowledgment events so alert badge and popups are dismissed immediately
+    const handleAckNotification = (e: any) => {
+      const detail = e.detail;
+      if (detail && detail.historyItemId && detail.recallNid) {
+        const cleanNid = String(detail.recallNid).trim();
+        setMonitoringAlerts((prev) =>
+          prev.filter(
+            (a) =>
+              !(
+                a.historyItem.id === detail.historyItemId &&
+                String(a.recall.NID || (a.recall as any)['Recall number'] || '').trim() === cleanNid
+              )
+          )
+        );
+        setEmergencyAlertItem((curr) => {
+          if (
+            curr &&
+            curr.historyItem.id === detail.historyItemId &&
+            String(curr.recall.NID || (curr.recall as any)['Recall number'] || '').trim() === cleanNid
+          ) {
+            return null;
+          }
+          return curr;
+        });
+      }
+    };
+
     window.addEventListener('recall-monitoring-alert', handleRecallAlert);
+    window.addEventListener('recall-notification-acknowledged', handleAckNotification);
 
     return () => {
       cleanupMonitor();
       window.removeEventListener('recall-monitoring-alert', handleRecallAlert);
+      window.removeEventListener('recall-notification-acknowledged', handleAckNotification);
     };
   }, [loadData]);
 
@@ -802,6 +835,16 @@ export const App: React.FC = () => {
             onAcknowledge={(historyItem, recall) => {
               acknowledgeRecallNotification(historyItem.id, recall);
               setEmergencyAlertItem(null);
+              const cleanNid = String(recall.NID || (recall as any)['Recall number'] || '').trim();
+              setMonitoringAlerts((prev) =>
+                prev.filter(
+                  (a) =>
+                    !(
+                      a.historyItem.id === historyItem.id &&
+                      String(a.recall.NID || (a.recall as any)['Recall number'] || '').trim() === cleanNid
+                    )
+                )
+              );
             }}
             historyItem={emergencyAlertItem.historyItem}
             recall={emergencyAlertItem.recall}

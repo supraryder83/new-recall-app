@@ -15,6 +15,7 @@ import {
   BellRing,
   RefreshCw,
   CheckCircle2,
+  Check,
   Shield,
   AlertTriangle,
   VolumeX,
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react';
 import { playRecallAlarmSound, stopRecallAlarmSound } from '../services/alarmSound';
 import type { RecallItem, ScanHistoryItem } from '../types/recall';
-import { getScanHistory, deleteScanFromHistory } from '../services/scanHistory';
+import { getScanHistory, deleteScanFromHistory, markScanRecallAcknowledged } from '../services/scanHistory';
 import {
   updateDatabaseAndCheckHistory,
   checkHistoryAgainstRecalls,
@@ -31,6 +32,8 @@ import {
   requestRecallNotificationPermission,
   getNotifiedRecallRecords,
   hasRecallBeenNotified,
+  isRecallNotificationAcknowledged,
+  acknowledgeRecallNotification,
   type NotifiedRecallRecord
 } from '../services/historyMonitor';
 
@@ -181,6 +184,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     window.addEventListener('scan-history-updated', handleUpdate);
     window.addEventListener('recall-monitoring-check-completed', handleUpdate);
     window.addEventListener('recall-notified-records-updated', handleUpdate);
+    window.addEventListener('recall-notification-acknowledged', handleUpdate);
 
     const handleAlarmState = (e: any) => {
       setIsAlarmPlaying(!!e.detail?.isPlaying);
@@ -191,9 +195,24 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       window.removeEventListener('scan-history-updated', handleUpdate);
       window.removeEventListener('recall-monitoring-check-completed', handleUpdate);
       window.removeEventListener('recall-notified-records-updated', handleUpdate);
+      window.removeEventListener('recall-notification-acknowledged', handleUpdate);
       window.removeEventListener('recall-alarm-playing-changed', handleAlarmState);
     };
   }, []);
+
+  const handleAcknowledgeRecall = (historyItem: ScanHistoryItem, recall?: RecallItem) => {
+    if (recall) {
+      acknowledgeRecallNotification(historyItem.id, recall);
+    } else if (historyItem.matchedRecalls && historyItem.matchedRecalls.length > 0) {
+      historyItem.matchedRecalls.forEach((r) => {
+        acknowledgeRecallNotification(historyItem.id, r);
+      });
+    } else {
+      markScanRecallAcknowledged(historyItem.id);
+    }
+    setHistoryItems(getScanHistory());
+    setNotifiedRecords(getNotifiedRecallRecords());
+  };
 
   const handleExport = () => {
     exportHistoryToCSV(historyItems);
@@ -566,6 +585,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             const isMatch = item.verdict === 'MATCH_FOUND';
             const isNewlyRecalled = item.isNewlyRecalled === true;
 
+            // Check if all matched recalls on this item are acknowledged
+            const isAcknowledged =
+              Boolean(item.acknowledged) ||
+              (Boolean(item.matchedRecalls && item.matchedRecalls.length > 0) &&
+                item.matchedRecalls!.every(
+                  (rec) =>
+                    item.acknowledgedRecallNids?.map((n) => String(n).trim()).includes(String(rec.NID).trim()) ||
+                    isRecallNotificationAcknowledged(item.id, rec)
+                ));
+
             // Check if any matched recall on this item has been tracked as notified
             const hasTrackedNotification =
               item.matchedRecalls &&
@@ -576,11 +605,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <div
                 key={item.id}
                 className={`bg-white rounded-2xl p-3.5 sm:p-5 border shadow-xs transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 group max-w-full min-w-0 overflow-hidden w-full ${
-                  isNewlyRecalled
+                  isNewlyRecalled && !isAcknowledged
                     ? 'border-red-400 ring-2 ring-red-500/20 bg-red-50/20'
-                    : isMatch
-                      ? 'border-red-200 hover:border-red-300'
-                      : 'border-slate-200/80 hover:border-slate-300'
+                    : isMatch && !isAcknowledged
+                      ? 'border-red-300 ring-1 ring-red-400/20 bg-red-50/10 hover:border-red-400'
+                      : isMatch && isAcknowledged
+                        ? 'border-slate-200/90 bg-white hover:border-slate-300'
+                        : 'border-slate-200/80 hover:border-slate-300'
                 }`}
               >
                 {/* Left Section: Thumbnail & Identifiers */}
@@ -608,26 +639,42 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wide shrink-0 ${
                           isMatch
-                            ? 'bg-red-100 text-red-800 border border-red-200'
+                            ? isAcknowledged
+                              ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                              : 'bg-red-100 text-red-800 border border-red-200'
                             : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                         }`}
                       >
                         {isMatch ? (
-                          <ShieldAlert className="w-3 h-3 text-red-600 shrink-0" />
+                          isAcknowledged ? (
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                          ) : (
+                            <ShieldAlert className="w-3 h-3 text-red-600 shrink-0" />
+                          )
                         ) : (
                           <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
                         )}
                         <span>
                           {isMatch
-                            ? 'Exact Recall Match'
+                            ? isAcknowledged
+                              ? 'Recall Acknowledged'
+                              : 'Exact Recall Match'
                             : 'No Recall Found'}
                         </span>
                       </span>
 
-                      {/* 6-Hour Monitor Recall Alert Badge */}
-                      {isNewlyRecalled && (
+                      {/* 6-Hour Monitor Recall Alert Badge (only if newly recalled and not yet acknowledged) */}
+                      {isNewlyRecalled && !isAcknowledged && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase bg-red-600 text-white animate-pulse shrink-0">
                           <span>🚨 Recalled After Scan</span>
+                        </span>
+                      )}
+
+                      {/* Acknowledged Badge */}
+                      {isMatch && isAcknowledged && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                          <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <span>Acknowledged</span>
                         </span>
                       )}
 
@@ -691,14 +738,40 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 </div>
 
                 {/* Right Section: Actions */}
-                <div className="flex items-center gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 min-w-0">
-                  <span
-                    className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 flex items-center justify-center gap-1 shrink-0"
-                    title="This product is in your history and is automatically verified for recalls when the app is opened"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Monitored</span>
-                  </span>
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 min-w-0">
+                  {isMatch && isAcknowledged ? (
+                    <span
+                      className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center gap-1 shrink-0"
+                      title="Recall acknowledged by you. This recall will not trigger popups again unless a new recall is issued for this product."
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Acknowledged</span>
+                    </span>
+                  ) : (
+                    <span
+                      className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 flex items-center justify-center gap-1 shrink-0"
+                      title="This product is in your history and is automatically verified for recalls when the app is opened"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Monitored</span>
+                    </span>
+                  )}
+
+                  {/* Acknowledge Button - allows 1-click acknowledgment of recalls in history */}
+                  {isMatch && !isAcknowledged && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAcknowledgeRecall(item);
+                      }}
+                      className="flex-1 sm:flex-initial px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap shrink-0"
+                      title="Mark this recall as acknowledged"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Acknowledge</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"

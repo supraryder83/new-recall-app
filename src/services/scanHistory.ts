@@ -120,3 +120,46 @@ export function deleteScanFromHistory(id: string): void {
     window.dispatchEvent(new CustomEvent('scan-history-updated', { detail: { deletedId: id } }));
   }
 }
+
+/**
+ * Mark a specific recall (or all recalls) as acknowledged for a scan history item
+ */
+export function markScanRecallAcknowledged(historyItemId: string, recallNid?: string): ScanHistoryItem | null {
+  const current = getScanHistory();
+  const item = current.find((it) => it.id === historyItemId);
+  if (!item) return null;
+
+  const cleanNid = recallNid ? String(recallNid).trim() : undefined;
+  const acknowledgedList = new Set(
+    (item.acknowledgedRecallNids || []).map((nid) => String(nid).trim())
+  );
+
+  if (cleanNid) {
+    acknowledgedList.add(cleanNid);
+  } else if (item.matchedRecalls) {
+    item.matchedRecalls.forEach((r) => {
+      const nid = String(r.NID || (r as any)['Recall number'] || r.Title || '').trim();
+      if (nid) acknowledgedList.add(nid);
+    });
+  }
+
+  // Check if all matched recalls are now acknowledged
+  const allMatchedAcknowledged =
+    !item.matchedRecalls ||
+    item.matchedRecalls.length === 0 ||
+    item.matchedRecalls.every((r) => {
+      const nid = String(r.NID || (r as any)['Recall number'] || r.Title || '').trim();
+      return acknowledgedList.has(nid);
+    });
+
+  const updated: ScanHistoryItem = {
+    ...item,
+    acknowledged: allMatchedAcknowledged,
+    acknowledgedAt: Date.now(),
+    acknowledgedRecallNids: Array.from(acknowledgedList),
+    isNewlyRecalled: !allMatchedAcknowledged
+  };
+
+  updateScanInHistory(updated);
+  return updated;
+}

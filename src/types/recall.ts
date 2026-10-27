@@ -80,4 +80,7 @@ export interface ScanHistoryItem {
   searchKeywords?: string;
   lastCheckedAt?: number;
   isNewlyRecalled?: boolean;
+  acknowledged?: boolean;
+  acknowledgedAt?: number;
+  acknowledgedRecallNids?: string[];
 }

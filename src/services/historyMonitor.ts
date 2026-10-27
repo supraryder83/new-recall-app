@@ -1,5 +1,5 @@
 import type { RecallItem, ScanHistoryItem } from '../types/recall';
-import { getScanHistory, updateMultipleScansInHistory } from './scanHistory';
+import { getScanHistory, updateMultipleScansInHistory, markScanRecallAcknowledged } from './scanHistory';
 import { crossReferenceRecallDataset } from './gemini';
 import { syncLiveRecallsDatabase } from './recallData';
 import { recallStorage } from './storage';
@@ -247,8 +247,28 @@ export function isRecallNotificationAcknowledged(historyItemId: string, recall: 
     (r) => r.key === searchKey || (r.historyItemId === historyItemId && r.recallNid === recallNid)
   );
 
-  // If never acknowledged -> display notification
+  // If never acknowledged in records, also check if scan item in scanHistory already has this recall acknowledged
   if (!record) {
+    try {
+      const history = getScanHistory();
+      const item = history.find((h) => h.id === historyItemId);
+      if (item) {
+        const cleanNids = (item.acknowledgedRecallNids || []).map((n) => String(n).trim());
+        if (cleanNids.includes(recallNid)) {
+          return true;
+        }
+        if (
+          item.acknowledged &&
+          item.matchedRecalls &&
+          item.matchedRecalls.length === 1 &&
+          String(item.matchedRecalls[0].NID || (item.matchedRecalls[0] as any)['Recall number'] || '').trim() === recallNid
+        ) {
+          return true;
+        }
+      }
+    } catch {
+      // ignore
+    }
     return false;
   }
 
@@ -300,6 +320,9 @@ export function acknowledgeRecallNotification(historyItemId: string, recall: Rec
     // Filter out previous version of this key if exists, then prepend new record
     const updated = [newRecord, ...records.filter((r) => r.key !== key)].slice(0, 1000);
     localStorage.setItem(ACKNOWLEDGED_NOTIFICATIONS_KEY, JSON.stringify(updated));
+
+    // Also mark the scan item directly in scan history as acknowledged
+    markScanRecallAcknowledged(historyItemId, recallNid);
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
@@ -407,8 +430,9 @@ export async function checkHistoryAgainstRecalls(
 
     if (hasMatches) {
       for (const recall of matchResult.matchedRecalls) {
-        // Check if we have ALREADY notified the user about this recall for this item
-        if (!hasRecallBeenNotified(item.id, recall.NID)) {
+        // Only trigger alerts if this recall has not been notified AND has not already been acknowledged
+        const alreadyAcked = isRecallNotificationAcknowledged(item.id, recall);
+        if (!hasRecallBeenNotified(item.id, recall.NID) && !alreadyAcked) {
           // Brand new recall for this item! Add to newly recalled list for notification
           itemHasNewNotification = true;
           newlyRecalledItems.push({ historyItem: item, recall });
@@ -427,6 +451,10 @@ export async function checkHistoryAgainstRecalls(
       }
     }
 
+    // A scanned item is marked in history as acknowledged if all its current matched recalls are acknowledged
+    const allMatchesAcknowledged =
+      hasMatches && matchResult.matchedRecalls.every((rec) => isRecallNotificationAcknowledged(item.id, rec));
+
     const updatedItem: ScanHistoryItem = {
       ...item,
       verdict: matchResult.verdict,
@@ -436,7 +464,8 @@ export async function checkHistoryAgainstRecalls(
       matchedRecallsCount: matchResult.matchedRecalls.length,
       matchReason: matchResult.matchReason,
       lastCheckedAt: now,
-      isNewlyRecalled: itemHasNewNotification || (wasSafe && hasMatches)
+      acknowledged: allMatchesAcknowledged,
+      isNewlyRecalled: hasMatches && !allMatchesAcknowledged && (itemHasNewNotification || (wasSafe && hasMatches))
     };
 
     updatedHistoryItems.push(updatedItem);
