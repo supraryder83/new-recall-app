@@ -203,6 +203,114 @@ export function recordNotifiedRecall(record: NotifiedRecallRecord): void {
   }
 }
 
+const ACKNOWLEDGED_NOTIFICATIONS_KEY = 'canada_recall_acknowledged_notifications_v1';
+
+export interface AcknowledgedRecallRecord {
+  key: string; // Composite unique key: `${historyItemId}_${recallNid}`
+  historyItemId: string;
+  recallNid: string;
+  recallTitle: string;
+  lastUpdated: string;
+  issueSnippet: string;
+  acknowledgedAt: number;
+}
+
+/**
+ * Retrieve the persistent list of all recall notifications the user has explicitly acknowledged and closed.
+ */
+export function getAcknowledgedRecallRecords(): AcknowledgedRecallRecord[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const raw = localStorage.getItem(ACKNOWLEDGED_NOTIFICATIONS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Checks if a specific recall notification for a scanned history item has been acknowledged by the user.
+ * Returns true (do NOT display notification again) UNLESS:
+ * 1. It was never acknowledged (new recall issued), OR
+ * 2. An existing recall has been updated/expanded (modification date or expanded text).
+ */
+export function isRecallNotificationAcknowledged(historyItemId: string, recall: RecallItem): boolean {
+  if (!historyItemId || !recall) return false;
+  const records = getAcknowledgedRecallRecords();
+  const rawAny = recall as any;
+  const recallNid = String(recall.NID || rawAny['Recall number'] || recall.Title || '').trim();
+  const searchKey = `${historyItemId}_${recallNid}`;
+
+  const record = records.find(
+    (r) => r.key === searchKey || (r.historyItemId === historyItemId && r.recallNid === recallNid)
+  );
+
+  // If never acknowledged -> display notification
+  if (!record) {
+    return false;
+  }
+
+  // Check if an existing recall has been expanded or updated with a new date
+  const currentLastUpdated = String(
+    recall['Last updated'] || rawAny['Date published'] || rawAny.Date || ''
+  ).trim();
+  if (record.lastUpdated && currentLastUpdated && currentLastUpdated !== record.lastUpdated) {
+    // Modification date changed: recall was expanded/updated
+    return false;
+  }
+
+  // Check if hazard description or affected products expanded significantly
+  const currentIssue = String(recall.Issue || recall['What you should do'] || '').trim();
+  if (record.issueSnippet && currentIssue.length > record.issueSnippet.length + 30) {
+    // Recall notice was expanded with additional information
+    return false;
+  }
+
+  return true; // Already acknowledged and unchanged
+}
+
+/**
+ * Record user acknowledgment of a recall notification so it will not be displayed again
+ * unless a new recall is issued or this recall is expanded.
+ */
+export function acknowledgeRecallNotification(historyItemId: string, recall: RecallItem): void {
+  if (typeof window === 'undefined' || !window.localStorage || !historyItemId || !recall) return;
+  try {
+    const records = getAcknowledgedRecallRecords();
+    const rawAny = recall as any;
+    const recallNid = String(recall.NID || rawAny['Recall number'] || recall.Title || '').trim();
+    const key = `${historyItemId}_${recallNid}`;
+    const lastUpdated = String(
+      recall['Last updated'] || rawAny['Date published'] || rawAny.Date || ''
+    ).trim();
+    const issueSnippet = String(recall.Issue || recall['What you should do'] || '').trim();
+
+    const newRecord: AcknowledgedRecallRecord = {
+      key,
+      historyItemId,
+      recallNid,
+      recallTitle: recall.Title || '',
+      lastUpdated,
+      issueSnippet,
+      acknowledgedAt: Date.now()
+    };
+
+    // Filter out previous version of this key if exists, then prepend new record
+    const updated = [newRecord, ...records.filter((r) => r.key !== key)].slice(0, 1000);
+    localStorage.setItem(ACKNOWLEDGED_NOTIFICATIONS_KEY, JSON.stringify(updated));
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('recall-notification-acknowledged', { detail: newRecord })
+      );
+    }
+  } catch (err) {
+    console.warn('Failed to save acknowledged recall record:', err);
+  }
+}
+
 /**
  * Normalizes and extracts product line and variation information.
  * Variations of the same product (e.g. different sizes, flavors, or batch lots) share the same groupKey.

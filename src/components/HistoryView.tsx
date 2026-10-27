@@ -17,11 +17,12 @@ import {
   CheckCircle2,
   Shield,
   AlertTriangle,
-  VolumeX
+  VolumeX,
+  Trash2
 } from 'lucide-react';
 import { playRecallAlarmSound, stopRecallAlarmSound } from '../services/alarmSound';
 import type { RecallItem, ScanHistoryItem } from '../types/recall';
-import { getScanHistory } from '../services/scanHistory';
+import { getScanHistory, deleteScanFromHistory } from '../services/scanHistory';
 import {
   updateDatabaseAndCheckHistory,
   checkHistoryAgainstRecalls,
@@ -155,6 +156,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [verifyResultState, setVerifyResultState] = useState<'idle' | 'all-clear' | 'recall-alert'>('idle');
   const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
   const [notificationsGranted, setNotificationsGranted] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Auto-reset delete confirmation after 4 seconds if not confirmed
+  useEffect(() => {
+    if (!confirmDeleteId) return;
+    const timer = setTimeout(() => {
+      setConfirmDeleteId(null);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [confirmDeleteId]);
 
   // Load history, check timestamps, notification records & permissions
   useEffect(() => {
@@ -341,7 +352,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               id="history-verify-now-btn"
               onClick={handleVerifyNow}
               disabled={isVerifyingNow || totalScans === 0}
-              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap min-w-0 ${
+              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap shrink-0 ${
                 isVerifyingNow
                   ? 'bg-slate-700/60 border-slate-600 text-slate-300 cursor-wait'
                   : verifyResultState === 'all-clear'
@@ -350,27 +361,27 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse border-red-500 ring-4 ring-red-400 shadow-lg shadow-red-500/40'
                   : 'bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white border-white/20'
               }`}
-              title="Update recall database and check history now"
+              title="Check for new recalls now"
             >
               {isVerifyingNow ? (
                 <>
                   <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-spin text-white" />
-                  <span>Updating & Checking...</span>
+                  <span>Checking...</span>
                 </>
               ) : verifyResultState === 'all-clear' ? (
                 <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-white" />
                   <span>All Clear (0 Recalls)</span>
                 </>
               ) : verifyResultState === 'recall-alert' ? (
                 <>
-                  <AlertTriangle className="w-3.5 h-3.5 text-white animate-bounce" />
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-white animate-bounce" />
                   <span>⚠️ Recall Detected!</span>
                 </>
               ) : (
                 <>
                   <RefreshCw className="w-3.5 h-3.5 shrink-0" />
-                  <span>Check for New Recalls Now</span>
+                  <span>Check Now</span>
                 </>
               )}
             </button>
@@ -411,7 +422,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           </div>
 
           <span className="text-[10px] sm:text-[11px] text-slate-400 italic break-words [overflow-wrap:anywhere]">
-            Scan history is permanent and cannot be cleared
+            Tap Delete twice to remove an item from your monitored history
           </span>
         </div>
 
@@ -717,6 +728,31 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       <ChevronRight className="w-3.5 h-3.5 shrink-0" />
                     </button>
                   ) : null}
+
+                  {/* Delete Item (Requires 2 Clicks to Confirm) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirmDeleteId === item.id) {
+                        deleteScanFromHistory(item.id);
+                        setHistoryItems((prev) => prev.filter((it) => it.id !== item.id));
+                        setConfirmDeleteId(null);
+                      } else {
+                        setConfirmDeleteId(item.id);
+                      }
+                    }}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 active:scale-95 ${
+                      confirmDeleteId === item.id
+                        ? 'bg-red-600 hover:bg-red-700 text-white ring-2 ring-red-400 shadow-sm animate-pulse'
+                        : 'bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 border border-slate-200/80 hover:border-red-200'
+                    }`}
+                    title={confirmDeleteId === item.id ? 'Click again to confirm deletion' : 'Delete item from history'}
+                    aria-label={confirmDeleteId === item.id ? 'Confirm delete' : 'Delete scan'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>{confirmDeleteId === item.id ? 'Confirm Delete?' : 'Delete'}</span>
+                  </button>
                 </div>
               </div>
             );

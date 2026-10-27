@@ -92,9 +92,11 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
   // Barcode detection and manual lookup state
   const [showManualCodeInput, setShowManualCodeInput] = useState(false);
   const [manualCode, setManualCode] = useState('');
-  const [detectedBarcode, setDetectedBarcode] = useState<string | null>(null);
+  const runBarcodeVerificationRef = useRef<((code: string) => Promise<void>) | null>(null);
+  const isAutoScanningBarcodeRef = useRef(false);
 
   // Native BarcodeDetector scanning loop from video stream
+  // When a barcode is detected, directly triggers verification without requiring manual confirmation
   useEffect(() => {
     if (!isOpen || flowState !== 'camera' || !cameraActive || !videoRef.current) return;
     if (typeof window === 'undefined' || !('BarcodeDetector' in window)) return;
@@ -110,23 +112,30 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
     }
 
     const interval = setInterval(async () => {
-      if (isCancelled || !videoRef.current || videoRef.current.readyState < 2) return;
+      if (isCancelled || isAutoScanningBarcodeRef.current || !videoRef.current || videoRef.current.readyState < 2) return;
       try {
         const barcodes = await detector.detect(videoRef.current);
         if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
           const raw = barcodes[0].rawValue.trim();
-          if (raw && raw !== detectedBarcode) {
-            setDetectedBarcode(raw);
+          if (raw && !isAutoScanningBarcodeRef.current) {
+            isAutoScanningBarcodeRef.current = true;
+            isCancelled = true;
+            clearInterval(interval);
+            try {
+              navigator.vibrate?.(60);
+            } catch {}
+            // Bypasses the unreliable "Barcode found, verify barcode" prompt and verifies immediately
+            runBarcodeVerificationRef.current?.(raw);
           }
         }
       } catch {}
-    }, 400);
+    }, 350);
 
     return () => {
       isCancelled = true;
       clearInterval(interval);
     };
-  }, [isOpen, flowState, cameraActive, detectedBarcode]);
+  }, [isOpen, flowState, cameraActive]);
 
   const handleSaveQuickKey = (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,6 +191,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
     async (targetDeviceId?: string, requestedFacing: 'environment' | 'user' = 'environment') => {
       stopCamera();
       setCameraError(null);
+      isAutoScanningBarcodeRef.current = false;
 
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -510,11 +520,14 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
       console.error('Barcode verification failed:', err);
       setAnalysisError(err?.message || 'Failed to verify code.');
       setFlowState('camera');
+      isAutoScanningBarcodeRef.current = false;
       await startCamera(undefined, facingMode);
     } finally {
       setAnalyzingStep('');
     }
   };
+
+  runBarcodeVerificationRef.current = runBarcodeVerification;
 
   // Handle shutter button click based on current step
   const handleShutterClick = async () => {
@@ -577,8 +590,9 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
     }
   };
 
-  // Reset to Step 1 to scan another item
+    // Reset to Step 1 to scan another item
   const handleScanAnother = async () => {
+    isAutoScanningBarcodeRef.current = false;
     setPhotoStep(1);
     setItemPhoto(null);
     setTagPhoto(null);
@@ -590,6 +604,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
 
   // Retake Step 1 photo
   const handleRetakeItemPhoto = async () => {
+    isAutoScanningBarcodeRef.current = false;
     setPhotoStep(1);
     setItemPhoto(null);
     setTagPhoto(null);
@@ -621,6 +636,7 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
 
   // Modal lifecycle
   useEffect(() => {
+    isAutoScanningBarcodeRef.current = false;
     if (!isOpen) {
       stopCamera();
       setItemPhoto(null);
@@ -640,6 +656,7 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
       startCamera(undefined, 'environment');
     }
     return () => {
+      isAutoScanningBarcodeRef.current = false;
       stopCamera();
     };
   }, [isOpen, startCamera, stopCamera]);
@@ -874,36 +891,6 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
          ========================================================================= */}
       {flowState === 'camera' && (
         <div className="relative flex-1 flex flex-col items-center justify-center p-4 pointer-events-none">
-          {/* Live Detected Barcode Notification Banner in Viewfinder */}
-          {detectedBarcode && (
-            <div className="pointer-events-auto absolute top-3 inset-x-4 z-40 bg-slate-900/95 border-2 border-amber-400 text-white rounded-2xl p-3 shadow-2xl backdrop-blur-md flex items-center justify-between gap-2.5 animate-in fade-in slide-in-from-top-2">
-              <div className="min-w-0">
-                <span className="block text-[10px] font-extrabold text-amber-400 uppercase tracking-wider">
-                  ⚡ Barcode Found in Camera
-                </span>
-                <span className="block text-xs font-mono font-bold text-white truncate">
-                  {detectedBarcode}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => runBarcodeVerification(detectedBarcode)}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all"
-                >
-                  Verify Barcode
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDetectedBarcode(null)}
-                  className="p-1 text-white/60 hover:text-white"
-                  aria-label="Dismiss barcode"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Step 1: Overall Product Guide Frame */}
           {photoStep === 1 && (

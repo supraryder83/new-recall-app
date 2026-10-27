@@ -35,6 +35,10 @@ import { EmergencyRecallModal } from './components/EmergencyRecallModal';
 import { playRecallAlarmSound } from './services/alarmSound';
 import { syncScanHistoryToBackendWatchlist } from './services/pipelineClient';
 import { getScanHistory } from './services/scanHistory';
+import {
+  isRecallNotificationAcknowledged,
+  acknowledgeRecallNotification
+} from './services/historyMonitor';
 
 const ITEMS_PER_PAGE = 30;
 
@@ -196,10 +200,15 @@ export const App: React.FC = () => {
           }
         }
 
-        // If newly recalled items detected on open, display recall info and sound alarm!
+        // If newly recalled items detected on open, display recall info and sound alarm (unless already acknowledged)
         if (syncRes.newlyRecalledCount > 0 && syncRes.newlyRecalledItems.length > 0) {
-          setEmergencyAlertItem(syncRes.newlyRecalledItems[0]);
-          playRecallAlarmSound(15);
+          const unacked = syncRes.newlyRecalledItems.find(
+            ({ historyItem, recall }) => !isRecallNotificationAcknowledged(historyItem.id, recall)
+          );
+          if (unacked) {
+            setEmergencyAlertItem(unacked);
+            playRecallAlarmSound(15);
+          }
         }
       }
     } catch (err: any) {
@@ -234,14 +243,17 @@ export const App: React.FC = () => {
       syncScanHistoryToBackendWatchlist(history).catch(() => {});
 
       // If user opens the app and has an active flagged recall in scan history, display info and sound alarm
-      const flagged = history.find(
-        (it) => it.verdict === 'MATCH_FOUND' && it.matchedRecalls && it.matchedRecalls.length > 0
-      );
-      if (flagged && flagged.matchedRecalls && flagged.matchedRecalls[0]) {
-        setEmergencyAlertItem({
-          historyItem: flagged,
-          recall: flagged.matchedRecalls[0]
-        });
+      // UNLESS already acknowledged by the user (unless recall is new or expanded)
+      const unacknowledgedFlagged = history
+        .map((it) => {
+          if (it.verdict !== 'MATCH_FOUND' || !it.matchedRecalls || it.matchedRecalls.length === 0) return null;
+          const unackedRecall = it.matchedRecalls.find((rec) => !isRecallNotificationAcknowledged(it.id, rec));
+          return unackedRecall ? { historyItem: it, recall: unackedRecall } : null;
+        })
+        .find(Boolean);
+
+      if (unacknowledgedFlagged) {
+        setEmergencyAlertItem(unacknowledgedFlagged);
         playRecallAlarmSound(15);
       }
     }
@@ -257,13 +269,18 @@ export const App: React.FC = () => {
       });
     });
 
-    // Listen for recall alerts triggered by verification
+    // Listen for recall alerts triggered by verification (filter out acknowledged notices)
     const handleRecallAlert = (e: any) => {
       const items = e.detail?.newlyRecalledItems;
       if (Array.isArray(items) && items.length > 0) {
         setMonitoringAlerts((prev) => [...items, ...prev]);
-        setEmergencyAlertItem(items[0]);
-        playRecallAlarmSound(15);
+        const unackedItem = items.find(
+          ({ historyItem, recall }: any) => !isRecallNotificationAcknowledged(historyItem.id, recall)
+        );
+        if (unackedItem) {
+          setEmergencyAlertItem(unackedItem);
+          playRecallAlarmSound(15);
+        }
       }
     };
 
@@ -744,6 +761,10 @@ export const App: React.FC = () => {
           <EmergencyRecallModal
             isOpen={Boolean(emergencyAlertItem)}
             onClose={() => setEmergencyAlertItem(null)}
+            onAcknowledge={(historyItem, recall) => {
+              acknowledgeRecallNotification(historyItem.id, recall);
+              setEmergencyAlertItem(null);
+            }}
             historyItem={emergencyAlertItem.historyItem}
             recall={emergencyAlertItem.recall}
             onNavigateToHistory={() => setCurrentTab('history')}

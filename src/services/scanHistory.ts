@@ -103,3 +103,20 @@ export function updateMultipleScansInHistory(updatedItems: ScanHistoryItem[]): v
     window.dispatchEvent(new CustomEvent('scan-history-updated'));
   }
 }
+
+/**
+ * Delete a single scan item from persistent history
+ */
+export function deleteScanFromHistory(id: string): void {
+  const current = getScanHistory();
+  const updated = current.filter((it) => it.id !== id);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.warn('Failed to delete scan from history:', err);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('scan-history-updated', { detail: { deletedId: id } }));
+  }
+}

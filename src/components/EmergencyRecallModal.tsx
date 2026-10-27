@@ -13,10 +13,12 @@ import {
 } from 'lucide-react';
 import type { RecallItem, ScanHistoryItem } from '../types/recall';
 import { playRecallAlarmSound, stopRecallAlarmSound, isAlarmSoundPlaying } from '../services/alarmSound';
+import { acknowledgeRecallNotification } from '../services/historyMonitor';
 
 export interface EmergencyRecallModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onAcknowledge?: (historyItem: ScanHistoryItem, recall: RecallItem) => void;
   historyItem: ScanHistoryItem;
   recall: RecallItem;
   onNavigateToHistory?: () => void;
@@ -26,6 +28,7 @@ export interface EmergencyRecallModalProps {
 export const EmergencyRecallModal: React.FC<EmergencyRecallModalProps> = ({
   isOpen,
   onClose,
+  onAcknowledge,
   historyItem,
   recall,
   onNavigateToHistory,
@@ -70,6 +73,16 @@ export const EmergencyRecallModal: React.FC<EmergencyRecallModalProps> = ({
   const handleClose = () => {
     stopRecallAlarmSound();
     setIsAudioPlaying(false);
+    onClose();
+  };
+
+  const handleAcknowledgeAndClose = () => {
+    stopRecallAlarmSound();
+    setIsAudioPlaying(false);
+    acknowledgeRecallNotification(historyItem.id, recall);
+    if (onAcknowledge) {
+      onAcknowledge(historyItem, recall);
+    }
     onClose();
   };
 
@@ -262,7 +275,7 @@ export const EmergencyRecallModal: React.FC<EmergencyRecallModalProps> = ({
           <button
             id="emergency-acknowledge-btn"
             type="button"
-            onClick={handleClose}
+            onClick={handleAcknowledgeAndClose}
             className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-95"
           >
             <Check className="w-4 h-4" />
