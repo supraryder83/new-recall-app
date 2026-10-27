@@ -5,6 +5,7 @@ import { syncLiveRecallsDatabase } from './recallData';
 import { recallStorage } from './storage';
 
 export const SIX_HOURS_MS = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
+const LAST_DB_SYNC_KEY = 'canada_recall_db_last_sync_ts';
 const LAST_CHECK_KEY = 'canada_recall_history_last_check_ts';
 const NOTIFIED_RECORDS_KEY = 'canada_recall_history_notified_records_v2';
 
@@ -35,12 +36,37 @@ export interface AppOpenSyncResult {
 }
 
 /**
+ * Get timestamp of the last database network sync
+ */
+export function getLastDatabaseSyncTime(): number | null {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const raw = localStorage.getItem(LAST_DB_SYNC_KEY) || localStorage.getItem(LAST_CHECK_KEY);
+    if (!raw) return null;
+    const ts = parseInt(raw, 10);
+    return isNaN(ts) ? null : ts;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Record a database network sync timestamp
+ */
+export function setLastDatabaseSyncTime(timestamp: number = Date.now()): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    localStorage.setItem(LAST_DB_SYNC_KEY, String(timestamp));
+  } catch {}
+}
+
+/**
  * Get timestamp of the last 6-hour history verification check
  */
 export function getLastHistoryCheckTime(): number | null {
   if (typeof window === 'undefined' || !window.localStorage) return null;
   try {
-    const raw = localStorage.getItem(LAST_CHECK_KEY);
+    const raw = localStorage.getItem(LAST_CHECK_KEY) || localStorage.getItem(LAST_DB_SYNC_KEY);
     if (!raw) return null;
     const ts = parseInt(raw, 10);
     return isNaN(ts) ? null : ts;
@@ -53,7 +79,7 @@ export function getLastHistoryCheckTime(): number | null {
  * Get estimated timestamp of the next scheduled 6-hour check
  */
 export function getNextHistoryCheckTime(): number {
-  const last = getLastHistoryCheckTime();
+  const last = getLastDatabaseSyncTime() || getLastHistoryCheckTime();
   if (!last) return Date.now();
   return last + SIX_HOURS_MS;
 }
@@ -409,60 +435,87 @@ export async function checkHistoryAgainstRecalls(
   };
 }
 
+let activeSyncPromise: Promise<AppOpenSyncResult> | null = null;
+
 /**
  * UPDATES THE DATABASE OF RECALLS AND THEN CHECKS HISTORY AGAINST NEW RECALLS.
- * Executes automatically when the app is opened, when resumed, or on user command.
+ * Only syncs from network once every 6 hours on app open (unless force=true).
+ * Otherwise loads the cached dataset and verifies history instantly without network overhead.
  */
 export async function updateDatabaseAndCheckHistory(
-  onProgress?: (step: string) => void
+  onProgress?: (step: string) => void,
+  force: boolean = false
 ): Promise<AppOpenSyncResult> {
-  onProgress?.('Updating Canadian safety recall database...');
-  const recallsRes = await syncLiveRecallsDatabase(onProgress);
+  if (activeSyncPromise) {
+    return activeSyncPromise;
+  }
 
-  onProgress?.('Checking your scan history against latest safety recalls...');
-  const checkResult = await checkHistoryAgainstRecalls(recallsRes.data, true);
+  activeSyncPromise = (async () => {
+    const now = Date.now();
+    const lastSync = getLastDatabaseSyncTime();
+    const isDue = force || !lastSync || now - lastSync >= SIX_HOURS_MS;
 
-  return {
-    recallsCount: recallsRes.count,
-    source: recallsRes.source,
-    checkedCount: checkResult.checkedCount,
-    newlyRecalledCount: checkResult.newlyRecalledCount,
-    newlyRecalledItems: checkResult.newlyRecalledItems,
-    timestamp: checkResult.timestamp
-  };
+    // 1. If not due (< 6h) and we already have cached data in storage, skip downloading the 15.6MB feed!
+    if (!isDue) {
+      const cached = await recallStorage.getAllRecalls();
+      if (cached && cached.length > 5000) {
+        const minutesAgo = Math.round((now - (lastSync || now)) / (60 * 1000));
+        onProgress?.(`Database is up to date (synced ${minutesAgo}m ago, 6h interval). Verifying scan history...`);
+        const checkResult = await checkHistoryAgainstRecalls(cached, false);
+        const meta = await recallStorage.getMetadata();
+        return {
+          recallsCount: cached.length,
+          source: meta.source || 'indexeddb',
+          checkedCount: checkResult.checkedCount,
+          newlyRecalledCount: checkResult.newlyRecalledCount,
+          newlyRecalledItems: checkResult.newlyRecalledItems,
+          timestamp: lastSync || now
+        };
+      }
+    }
+
+    // 2. Otherwise (due or forced or no cache), sync the database from the live feed / bundled file
+    onProgress?.('Updating Canadian safety recall database (6-hour scheduled sync)...');
+    const recallsRes = await syncLiveRecallsDatabase(onProgress);
+
+    // Save timestamp of this network database sync
+    setLastDatabaseSyncTime(now);
+
+    onProgress?.('Checking your scan history against latest safety recalls...');
+    const checkResult = await checkHistoryAgainstRecalls(recallsRes.data, true);
+
+    return {
+      recallsCount: recallsRes.count,
+      source: recallsRes.source,
+      checkedCount: checkResult.checkedCount,
+      newlyRecalledCount: checkResult.newlyRecalledCount,
+      newlyRecalledItems: checkResult.newlyRecalledItems,
+      timestamp: now
+    };
+  })();
+
+  try {
+    return await activeSyncPromise;
+  } finally {
+    activeSyncPromise = null;
+  }
 }
 
 /**
- * Initializes automatic database update and scan history verification when the app is opened.
- * Also monitors document visibility and window focus so returning to the app checks for new recalls.
+ * Initializes automatic database update and scan history verification when the app is resumed or refocused.
+ * Enforces the 6-hour interval so network sync only occurs once every 6 hours.
  */
 export function initAppOpenHistoryMonitor(
   onRecallsUpdated?: (recalls: RecallItem[]) => void,
   onProgress?: (step: string) => void
 ): () => void {
-  // 1. Run immediately on app open: update database of recalls and check history
-  updateDatabaseAndCheckHistory(onProgress)
-    .then((res) => {
-      if (res.recallsCount > 0 && onRecallsUpdated) {
-        recallStorage.getAllRecalls().then((data) => {
-          if (data && data.length > 0) {
-            onRecallsUpdated(data);
-          }
-        });
-      }
-    })
-    .catch((err) => {
-      console.warn('[HistoryMonitor] App-open update warning:', err);
-    });
-
-  // 2. Check whenever user resumes or refocuses the app (with 3-minute throttle)
-  let lastCheckTime = Date.now();
+  // Check whenever user resumes or refocuses the app (with 6-hour throttle)
   const handleResume = () => {
     if (document.visibilityState === 'visible') {
+      const lastCheck = getLastDatabaseSyncTime() || getLastHistoryCheckTime();
       const now = Date.now();
-      if (now - lastCheckTime > 3 * 60 * 1000) {
-        lastCheckTime = now;
-        updateDatabaseAndCheckHistory(onProgress)
+      if (!lastCheck || now - lastCheck >= SIX_HOURS_MS) {
+        updateDatabaseAndCheckHistory(onProgress, false)
           .then((res) => {
             if (res.recallsCount > 0 && onRecallsUpdated) {
               recallStorage.getAllRecalls().then((data) => {

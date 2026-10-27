@@ -93,8 +93,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setIsTriggeringSync(true);
     setSyncFeedback('Updating recall database and verifying scan history...');
     try {
-      // 1. Sync local recall database & verify against scan history
-      const syncRes = await updateDatabaseAndCheckHistory();
+      // 1. Sync local recall database & verify against scan history (forced)
+      const syncRes = await updateDatabaseAndCheckHistory(undefined, true);
 
       // 2. If backend is running, also trigger backend sync
       try {
@@ -166,11 +166,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   Recall Database Sync & History Protection
                 </h4>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-emerald-100 text-emerald-800">
-                  Checks On App Open
+                  Syncs Every 6h On Open
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                Pulls Health Canada & CFIA updates on open and verifies against your scan history.
+                Pulls Health Canada & CFIA updates once every 6 hours on app open and verifies against your scan history.
               </p>
             </div>
           </div>
@@ -194,7 +194,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
           <div>
             <span className="text-slate-500 block text-[11px]">Auto Verification</span>
-            <strong className="text-slate-900">Every App Open</strong>
+            <strong className="text-slate-900">Every 6 Hours (On Open)</strong>
           </div>
           <div>
             <span className="text-slate-500 block text-[11px]">Database Notices</span>

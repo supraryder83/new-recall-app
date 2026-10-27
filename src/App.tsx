@@ -16,6 +16,7 @@ import { recallStorage } from './services/storage';
 import {
   initAppOpenHistoryMonitor,
   updateDatabaseAndCheckHistory,
+  getLastDatabaseSyncTime,
   requestRecallNotificationPermission,
   getProductVariationGrouping
 } from './services/historyMonitor';
@@ -142,12 +143,12 @@ export const App: React.FC = () => {
     }
   };
 
-  // Load Data & Update Database on App Open
+  // Load Data & Update Database on App Open (only syncs once every 6 hours)
   const loadData = useCallback(async (forceRefresh = false) => {
     setSyncState((prev) => ({ ...prev, status: 'loading', errorMessage: undefined }));
     try {
       if (forceRefresh) {
-        const syncRes = await updateDatabaseAndCheckHistory((step) => setLoadingProgress(step));
+        const syncRes = await updateDatabaseAndCheckHistory((step) => setLoadingProgress(step), true);
         const updated = await recallStorage.getAllRecalls();
         setAllRecalls(updated.length > 0 ? updated : []);
         setSyncState({
@@ -159,18 +160,19 @@ export const App: React.FC = () => {
       } else {
         // Fast path: load cached data first so UI renders instantly
         const instant = await loadInstantCachedRecalls();
+        const lastSync = getLastDatabaseSyncTime() || Date.now();
         if (instant && instant.data.length > 0) {
           setAllRecalls(instant.data);
           setSyncState({
             status: 'cached',
-            lastSynced: Date.now(),
+            lastSynced: lastSync,
             totalRecords: instant.count,
             source: instant.source
           });
         }
 
-        // Then immediately update database from live feed and check history
-        const syncRes = await updateDatabaseAndCheckHistory((step) => setLoadingProgress(step));
+        // Only syncs from network if 6 hours have passed since last sync (force = false)
+        const syncRes = await updateDatabaseAndCheckHistory((step) => setLoadingProgress(step), false);
         if (syncRes.recallsCount > 0) {
           const updated = await recallStorage.getAllRecalls();
           if (updated.length > 0) {
@@ -192,7 +194,7 @@ export const App: React.FC = () => {
         setAllRecalls(existing);
         setSyncState({
           status: 'cached',
-          lastSynced: Date.now(),
+          lastSynced: getLastDatabaseSyncTime() || Date.now(),
           totalRecords: existing.length,
           source: 'indexeddb'
         });

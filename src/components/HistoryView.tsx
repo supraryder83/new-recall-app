@@ -192,7 +192,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     try {
       const result = await updateDatabaseAndCheckHistory((step) => {
         setVerificationFeedback(step);
-      });
+      }, true);
       setLastCheckTime(result.timestamp);
       setHistoryItems(getScanHistory());
       setNotifiedRecords(getNotifiedRecallRecords());
@@ -249,7 +249,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 break-words [overflow-wrap:anywhere]">
-            Your permanent safety log & automatic recall verification on app open
+            Your permanent safety log & 6-hour automatic recall sync on app open
           </p>
         </div>
 
@@ -291,11 +291,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 </h3>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Checks on App Open
+                  Syncs Every 6h On Open
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed break-words [overflow-wrap:anywhere]">
-                Every product in your scan history is continuously monitored. Whenever you open the app, the recall database is updated from Health Canada and checked against your scan history. You receive immediate alerts if any scanned product is recalled.
+                Every product in your scan history is continuously monitored. On app open, the recall database is synced every 6 hours from Health Canada and checked against your scan history. You receive immediate alerts if any scanned product is recalled.
               </p>
             </div>
           </div>
@@ -348,7 +348,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span className="shrink-0">Schedule:</span>
               <strong className="text-slate-200 break-words">
-                On every app open & resume
+                Every 6 hours on app open
               </strong>
             </span>
 
