@@ -12,14 +12,14 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 }) => {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('Connecting to Canadian Open Data safety registry...');
-  const [hasCompleted4Seconds, setHasCompleted4Seconds] = useState(false);
+  const [hasCompletedMinDuration, setHasCompletedMinDuration] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
   const [isFadingOut, setIsFadingOut] = useState(false);
 
-  // Exact 4-second progress timeline
+  // Smooth 3-second progress timeline (1s faster)
   useEffect(() => {
     const startTime = Date.now();
-    const duration = 4000; // Exact 4 seconds requirement
+    const duration = 3000; // 3 seconds
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
@@ -28,7 +28,7 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 
       setProgress(currentPercent);
 
-      // Dynamic phase messages across the 4 seconds
+      // Dynamic phase messages across the 3 seconds
       if (currentPercent < 28) {
         setStatusText('Connecting to Canadian Open Data safety registry...');
       } else if (currentPercent < 62) {
@@ -43,26 +43,26 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 
       if (fraction >= 1) {
         clearInterval(interval);
-        setHasCompleted4Seconds(true);
+        setHasCompletedMinDuration(true);
       }
-    }, 40);
+    }, 30);
 
     return () => clearInterval(interval);
   }, []);
 
-  // Dismiss only once BOTH the 4-second duration has elapsed AND background loading is complete
+  // Dismiss once BOTH the 3-second duration has elapsed AND background loading is complete
   useEffect(() => {
-    if (hasCompleted4Seconds && !isLoading) {
+    if (hasCompletedMinDuration && !isLoading) {
       const delayTimer = setTimeout(() => {
         setIsFadingOut(true);
         const unmountTimer = setTimeout(() => {
           setShouldRender(false);
-        }, 450); // Matches CSS transition duration
+        }, 400); // Matches CSS transition duration
         return () => clearTimeout(unmountTimer);
-      }, 250);
+      }, 150);
       return () => clearTimeout(delayTimer);
     }
-  }, [hasCompleted4Seconds, isLoading]);
+  }, [hasCompletedMinDuration, isLoading]);
 
   if (!shouldRender) return null;
 
@@ -83,7 +83,7 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
       {/* Top spacer */}
       <div className="w-full flex justify-end shrink-0 pt-1">
         <span className="text-[10px] font-mono text-slate-500 font-semibold uppercase tracking-wider">
-          v2.0 • 4s Initializing
+          v2.0 • Initializing
         </span>
       </div>
 

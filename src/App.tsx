@@ -809,7 +809,7 @@ export const App: React.FC = () => {
             onViewFullRecallNotice={(recall) => handleSelectRecall(recall)}
           />
         )}
-        {/* INITIAL APP LOADING SCREEN WITH CANADIAN RECALL LOGO, DISCLAIMER & 4-SECOND PROGRESS BAR */}
+        {/* INITIAL APP LOADING SCREEN WITH CANADIAN RECALL LOGO, DISCLAIMER & PROGRESS BAR */}
         <AppLoadingScreen
           isLoading={isInitialAppLoading}
           onOpenLegal={handleOpenLegal}
