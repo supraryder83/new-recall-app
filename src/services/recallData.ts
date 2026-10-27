@@ -1,15 +1,12 @@
 import type { RecallItem, CategoryFilter, CategoryDefinition } from '../types/recall';
 import { recallStorage } from './storage';
 
-export const PRIMARY_FEED_URL =
-  'https://recalls-rappels.canada.ca/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json';
+export const PRIMARY_FEED_URL = '/api/recalls';
 
-// Proxy paths (Vite dev proxy first, then local bundled data, then fast public gateways)
+// Server endpoints: clients fetch from this server (cached 6 hours), falling back to local bundled dataset
 export const PROXY_ENDPOINTS = [
   '/api/recalls',
-  '/data/initial-recalls.json',
-  'https://api.allorigins.win/raw?url=' + encodeURIComponent(PRIMARY_FEED_URL),
-  'https://corsproxy.io/?url=' + encodeURIComponent(PRIMARY_FEED_URL)
+  '/data/initial-recalls.json'
 ];
 
 export const CATEGORIES: CategoryDefinition[] = [
@@ -161,14 +158,19 @@ export async function loadInstantCachedRecalls(): Promise<FetchFeedResult | null
 export async function syncLiveRecallsDatabase(
   onProgress?: (step: string) => void
 ): Promise<FetchFeedResult> {
-  onProgress?.('Connecting to Canadian Open Data safety registry...');
+  onProgress?.('Connecting to Canadian recall server cache...');
 
-  // Try /api/recalls first (backend), then /data/initial-recalls.json (static fallback), then external feeds
-  const candidateUrls = ['/api/recalls', '/data/initial-recalls.json', PRIMARY_FEED_URL, ...PROXY_ENDPOINTS.slice(2)];
+  // Clients fetch directly from this server's 6-hour cached API endpoint,
+  // falling back to local bundled data if server is unreachable
+  const candidateUrls = ['/api/recalls', '/data/initial-recalls.json'];
 
   for (const url of candidateUrls) {
     try {
-      onProgress?.('Fetching latest Health Canada & CFIA recall updates...');
+      onProgress?.(
+        url === '/api/recalls'
+          ? 'Fetching 6-hour cached recall notices from server...'
+          : 'Loading local safety registry...'
+      );
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25000);
       const res = await fetch(url, {
@@ -189,7 +191,7 @@ export async function syncLiveRecallsDatabase(
 
         if (Array.isArray(json) && json.length > 0) {
           onProgress?.(`Updating database with ${json.length.toLocaleString()} notices...`);
-          const source = url === '/api/recalls' || url === PRIMARY_FEED_URL ? 'live' : 'proxy';
+          const source = url === '/api/recalls' ? 'live' : 'bundled';
           await recallStorage.saveRecalls(json, source);
 
           if (typeof window !== 'undefined') {

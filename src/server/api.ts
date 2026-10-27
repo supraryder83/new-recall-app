@@ -8,6 +8,8 @@ import { runSyncPipeline } from './pipeline.ts';
 import { initVapid } from './pushService.ts';
 import webpush from 'web-push';
 
+import { handleRecallsApiRequest } from './recallsCache.ts';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -57,6 +59,11 @@ export async function handlePipelineApiRequest(
 
   if (!url.startsWith('/api/')) {
     return next();
+  }
+
+  // 0. GET /api/recalls and /api/recalls/status (6-hour cached Health Canada feed)
+  if (url === '/api/recalls' || url.startsWith('/api/recalls?') || url.startsWith('/api/recalls/')) {
+    return handleRecallsApiRequest(req, res);
   }
 
   // Handle CORS preflight options

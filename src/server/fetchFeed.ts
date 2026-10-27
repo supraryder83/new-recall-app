@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { RecallItem } from '../types/recall';
 import { pipelineStore } from './store';
 import { parsePublicationDate } from './normalizer';
+import { getOrFetchRecallsBuffer } from './recallsCache';
 
 export const HEALTH_CANADA_FEED_URL =
   'https://recalls-rappels.canada.ca/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json';
@@ -142,23 +143,42 @@ export async function queryHealthCanadaFeed(options: FetchOptions = {}): Promise
   let feedSource = feedUrl;
 
   try {
-    const res = await fetchWithExponentialBackoff(feedUrl, {
-      maxRetries: options.maxRetries ?? 3,
-      initialDelayMs: options.initialDelayMs ?? 1000,
-      backoffFactor: options.backoffFactor ?? 2,
-      timeoutMs: options.timeoutMs ?? 15000
-    });
-
-    let json: any = await res.json();
-    if (json && json.contents && typeof json.contents === 'string') {
-      json = JSON.parse(json.contents);
+    if (feedUrl === HEALTH_CANADA_FEED_URL) {
+      const { buffer, fromCache } = await getOrFetchRecallsBuffer(options.forceAll);
+      if (buffer) {
+        let json: any = JSON.parse(buffer.toString('utf8'));
+        if (json && json.contents && typeof json.contents === 'string') {
+          json = JSON.parse(json.contents);
+        }
+        if (typeof json === 'string') {
+          json = JSON.parse(json);
+        }
+        if (Array.isArray(json) && json.length > 0) {
+          rawData = json;
+          feedSource = fromCache ? 'server-cache-6h' : 'health-canada-live';
+        }
+      }
     }
-    if (typeof json === 'string') {
-      json = JSON.parse(json);
-    }
 
-    if (Array.isArray(json)) {
-      rawData = json;
+    if (rawData.length === 0) {
+      const res = await fetchWithExponentialBackoff(feedUrl, {
+        maxRetries: options.maxRetries ?? 3,
+        initialDelayMs: options.initialDelayMs ?? 1000,
+        backoffFactor: options.backoffFactor ?? 2,
+        timeoutMs: options.timeoutMs ?? 15000
+      });
+
+      let json: any = await res.json();
+      if (json && json.contents && typeof json.contents === 'string') {
+        json = JSON.parse(json.contents);
+      }
+      if (typeof json === 'string') {
+        json = JSON.parse(json);
+      }
+
+      if (Array.isArray(json)) {
+        rawData = json;
+      }
     }
   } catch (err: any) {
     console.warn(`[FeedFetcher] Network query failed (${err.message}). Falling back to bundled dataset...`);

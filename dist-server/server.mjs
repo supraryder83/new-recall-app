@@ -1,13 +1,13 @@
 // server.ts
 import http from "node:http";
-import fs5 from "node:fs";
-import path7 from "node:path";
-import { fileURLToPath as fileURLToPath5 } from "node:url";
+import fs6 from "node:fs";
+import path8 from "node:path";
+import { fileURLToPath as fileURLToPath6 } from "node:url";
 import dotenv5 from "dotenv";
 
 // src/server/api.ts
-import path5 from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import path6 from "node:path";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 import dotenv3 from "dotenv";
 
 // src/server/env.ts
@@ -307,8 +307,8 @@ var PipelineStore = class {
 var pipelineStore = new PipelineStore();
 
 // src/server/fetchFeed.ts
-import fs3 from "node:fs";
-import path3 from "node:path";
+import fs4 from "node:fs";
+import path4 from "node:path";
 
 // src/server/normalizer.ts
 var STOPWORDS = /* @__PURE__ */ new Set([
@@ -580,8 +580,228 @@ function normalizeRecallsBatch(items) {
   return items.map(normalizeRecall);
 }
 
-// src/server/fetchFeed.ts
+// src/server/recallsCache.ts
+import fs3 from "node:fs";
+import path3 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+var __filename2 = fileURLToPath2(import.meta.url);
+var __dirname2 = path3.dirname(__filename2);
 var HEALTH_CANADA_FEED_URL = "https://recalls-rappels.canada.ca/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json";
+var SIX_HOURS_MS = 6 * 60 * 60 * 1e3;
+var DATA_DIR2 = path3.resolve(process.cwd(), "data");
+var RECALLS_CACHE_FILE = path3.join(DATA_DIR2, "recalls-cache.json");
+function getBundledFallbackPath() {
+  const candidates = [
+    path3.resolve(process.cwd(), "public/data/initial-recalls.json"),
+    path3.resolve(process.cwd(), "dist/data/initial-recalls.json"),
+    path3.resolve(__dirname2, "../../public/data/initial-recalls.json"),
+    path3.resolve(__dirname2, "../public/data/initial-recalls.json")
+  ];
+  for (const c of candidates) {
+    if (fs3.existsSync(c)) return c;
+  }
+  return null;
+}
+var cachedRecallsBuffer = null;
+var lastCacheFetchTime = 0;
+var activeFetchPromise = null;
+function initFromDisk() {
+  try {
+    if (fs3.existsSync(RECALLS_CACHE_FILE)) {
+      const stat = fs3.statSync(RECALLS_CACHE_FILE);
+      const buf = fs3.readFileSync(RECALLS_CACHE_FILE);
+      if (buf && buf.length > 1e3) {
+        cachedRecallsBuffer = buf;
+        lastCacheFetchTime = stat.mtimeMs;
+        const ageMinutes = Math.round((Date.now() - lastCacheFetchTime) / (60 * 1e3));
+        const isFresh = Date.now() - lastCacheFetchTime < SIX_HOURS_MS;
+        console.log(
+          `[RecallsCache] Initialized with disk cache (${(buf.length / 1024 / 1024).toFixed(1)} MB, updated ${ageMinutes}m ago). ` + (isFresh ? `Cache is fresh for next ${Math.round((SIX_HOURS_MS - (Date.now() - lastCacheFetchTime)) / 6e4)}m.` : "Cache is older than 6h, background refresh scheduled.")
+        );
+        if (!isFresh) {
+          refreshRecallsFeed(true).catch(() => {
+          });
+        }
+        return;
+      }
+    }
+    const bundledPath = getBundledFallbackPath();
+    if (bundledPath) {
+      const buf = fs3.readFileSync(bundledPath);
+      if (buf && buf.length > 1e3) {
+        cachedRecallsBuffer = buf;
+        lastCacheFetchTime = 0;
+        console.log(
+          `[RecallsCache] Initialized with local bundled fallback (${(buf.length / 1024 / 1024).toFixed(1)} MB). Fetching live 6-hour cache...`
+        );
+        refreshRecallsFeed(true).catch(() => {
+        });
+        return;
+      }
+    }
+    refreshRecallsFeed(true).catch(() => {
+    });
+  } catch (err) {
+    console.warn("[RecallsCache] Error initializing cache from disk:", err.message);
+  }
+}
+initFromDisk();
+async function refreshRecallsFeed(force = false) {
+  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < SIX_HOURS_MS;
+  if (!force && isFresh) {
+    return cachedRecallsBuffer;
+  }
+  if (activeFetchPromise) {
+    return activeFetchPromise;
+  }
+  activeFetchPromise = (async () => {
+    try {
+      console.log("[RecallsCache] Fetching fresh Health Canada open data feed (6-hour update window)...");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3e4);
+      const upstream = await fetch(HEALTH_CANADA_FEED_URL, {
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "User-Agent": "CanadaRecallAlert-Backend/1.0 (+https://recalls-rappels.canada.ca)"
+        }
+      });
+      clearTimeout(timeout);
+      if (upstream.ok) {
+        const arrayBuf = await upstream.arrayBuffer();
+        const buf = Buffer.from(arrayBuf);
+        if (buf.length > 1e3) {
+          cachedRecallsBuffer = buf;
+          lastCacheFetchTime = Date.now();
+          try {
+            if (!fs3.existsSync(DATA_DIR2)) {
+              fs3.mkdirSync(DATA_DIR2, { recursive: true });
+            }
+            fs3.writeFileSync(RECALLS_CACHE_FILE, buf);
+          } catch (writeErr) {
+            console.warn("[RecallsCache] Could not persist cache to disk:", writeErr.message);
+          }
+          console.log(
+            `[RecallsCache] Successfully cached Health Canada recalls feed (${(buf.length / 1024 / 1024).toFixed(1)} MB). Locked for 6 hours until ${new Date(
+              lastCacheFetchTime + SIX_HOURS_MS
+            ).toISOString()}.`
+          );
+          return buf;
+        }
+      } else {
+        console.warn(`[RecallsCache] Upstream Health Canada returned HTTP ${upstream.status}: ${upstream.statusText}`);
+      }
+    } catch (err) {
+      console.warn("[RecallsCache] Failed to refresh Health Canada feed:", err.message);
+    } finally {
+      activeFetchPromise = null;
+    }
+    return cachedRecallsBuffer;
+  })();
+  return activeFetchPromise;
+}
+async function getOrFetchRecallsBuffer(force = false) {
+  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < SIX_HOURS_MS;
+  if (!force && isFresh && cachedRecallsBuffer) {
+    return {
+      buffer: cachedRecallsBuffer,
+      fromCache: true,
+      lastUpdated: lastCacheFetchTime
+    };
+  }
+  const buf = await refreshRecallsFeed(force);
+  return {
+    buffer: buf || cachedRecallsBuffer,
+    fromCache: !force && Boolean(isFresh),
+    lastUpdated: lastCacheFetchTime
+  };
+}
+function getRecallsCacheStatus() {
+  const now = Date.now();
+  const ageMs = lastCacheFetchTime ? now - lastCacheFetchTime : null;
+  const isFresh = Boolean(cachedRecallsBuffer && ageMs !== null && ageMs < SIX_HOURS_MS);
+  return {
+    isCached: Boolean(cachedRecallsBuffer),
+    cacheTtlHours: 6,
+    cacheTtlMs: SIX_HOURS_MS,
+    lastUpdated: lastCacheFetchTime,
+    lastUpdatedIso: lastCacheFetchTime ? new Date(lastCacheFetchTime).toISOString() : null,
+    nextUpdateAt: lastCacheFetchTime ? lastCacheFetchTime + SIX_HOURS_MS : null,
+    nextUpdateIso: lastCacheFetchTime ? new Date(lastCacheFetchTime + SIX_HOURS_MS).toISOString() : null,
+    ageSeconds: ageMs !== null ? Math.floor(ageMs / 1e3) : null,
+    ageMinutes: ageMs !== null ? Math.floor(ageMs / (1e3 * 60)) : null,
+    sizeBytes: cachedRecallsBuffer?.length || 0,
+    sizeMb: Number(((cachedRecallsBuffer?.length || 0) / (1024 * 1024)).toFixed(2)),
+    isFresh
+  };
+}
+async function handleRecallsApiRequest(req, res) {
+  const url = req.url || "";
+  const method = req.method || "GET";
+  if (method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
+      "Access-Control-Max-Age": "86400"
+    });
+    res.end();
+    return;
+  }
+  if (url === "/api/recalls/status" || url === "/api/recalls-status") {
+    const status = getRecallsCacheStatus();
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "no-cache"
+    });
+    res.end(JSON.stringify(status, null, 2));
+    return;
+  }
+  const etag = lastCacheFetchTime ? `"recalls-${lastCacheFetchTime}"` : null;
+  const clientEtag = req.headers["if-none-match"];
+  if (clientEtag && etag && clientEtag === etag && cachedRecallsBuffer) {
+    res.writeHead(304, {
+      "Access-Control-Allow-Origin": "*",
+      "ETag": etag,
+      "Cache-Control": "public, max-age=21600, stale-while-revalidate=3600"
+    });
+    res.end();
+    return;
+  }
+  const { buffer, fromCache, lastUpdated } = await getOrFetchRecallsBuffer(false);
+  if (!buffer) {
+    res.writeHead(502, {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    });
+    res.end(
+      JSON.stringify({
+        error: "Recalls Cache Unavailable",
+        message: "Could not fetch Health Canada dataset and no cache is currently available."
+      })
+    );
+    return;
+  }
+  const ageSeconds = lastUpdated ? Math.floor((Date.now() - lastUpdated) / 1e3) : 0;
+  const nextUpdateSeconds = Math.max(0, Math.floor((SIX_HOURS_MS - (Date.now() - lastUpdated)) / 1e3));
+  const currentEtag = lastUpdated ? `"recalls-${lastUpdated}"` : '"recalls-initial"';
+  res.writeHead(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "public, max-age=21600, stale-while-revalidate=3600",
+    // 6 hours
+    "ETag": currentEtag,
+    "Last-Modified": lastUpdated ? new Date(lastUpdated).toUTCString() : (/* @__PURE__ */ new Date()).toUTCString(),
+    "X-Server-Cache": fromCache ? "HIT" : "MISS",
+    "X-Cache-Age-Seconds": String(ageSeconds),
+    "X-Next-Update-In-Seconds": String(nextUpdateSeconds)
+  });
+  res.end(buffer);
+}
+
+// src/server/fetchFeed.ts
+var HEALTH_CANADA_FEED_URL2 = "https://recalls-rappels.canada.ca/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json";
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -632,9 +852,9 @@ async function fetchWithExponentialBackoff(url, options = {}) {
 }
 function loadBundledFallback() {
   try {
-    const localPath = path3.resolve(process.cwd(), "public/data/initial-recalls.json");
-    if (fs3.existsSync(localPath)) {
-      const raw = fs3.readFileSync(localPath, "utf8");
+    const localPath = path4.resolve(process.cwd(), "public/data/initial-recalls.json");
+    if (fs4.existsSync(localPath)) {
+      const raw = fs4.readFileSync(localPath, "utf8");
       const data = JSON.parse(raw);
       if (Array.isArray(data) && data.length > 0) {
         console.log(`[FeedFetcher] Fallback loaded ${data.length.toLocaleString()} bundled records.`);
@@ -648,7 +868,7 @@ function loadBundledFallback() {
 }
 async function queryHealthCanadaFeed(options = {}) {
   const startTime = Date.now();
-  const feedUrl = options.feedUrl || HEALTH_CANADA_FEED_URL;
+  const feedUrl = options.feedUrl || HEALTH_CANADA_FEED_URL2;
   const windowHours = options.windowHours ?? 24;
   const windowMs = windowHours * 60 * 60 * 1e3;
   const referenceTime = options.referenceTimestamp || Date.now();
@@ -656,21 +876,39 @@ async function queryHealthCanadaFeed(options = {}) {
   let rawData = [];
   let feedSource = feedUrl;
   try {
-    const res = await fetchWithExponentialBackoff(feedUrl, {
-      maxRetries: options.maxRetries ?? 3,
-      initialDelayMs: options.initialDelayMs ?? 1e3,
-      backoffFactor: options.backoffFactor ?? 2,
-      timeoutMs: options.timeoutMs ?? 15e3
-    });
-    let json = await res.json();
-    if (json && json.contents && typeof json.contents === "string") {
-      json = JSON.parse(json.contents);
+    if (feedUrl === HEALTH_CANADA_FEED_URL2) {
+      const { buffer, fromCache } = await getOrFetchRecallsBuffer(options.forceAll);
+      if (buffer) {
+        let json = JSON.parse(buffer.toString("utf8"));
+        if (json && json.contents && typeof json.contents === "string") {
+          json = JSON.parse(json.contents);
+        }
+        if (typeof json === "string") {
+          json = JSON.parse(json);
+        }
+        if (Array.isArray(json) && json.length > 0) {
+          rawData = json;
+          feedSource = fromCache ? "server-cache-6h" : "health-canada-live";
+        }
+      }
     }
-    if (typeof json === "string") {
-      json = JSON.parse(json);
-    }
-    if (Array.isArray(json)) {
-      rawData = json;
+    if (rawData.length === 0) {
+      const res = await fetchWithExponentialBackoff(feedUrl, {
+        maxRetries: options.maxRetries ?? 3,
+        initialDelayMs: options.initialDelayMs ?? 1e3,
+        backoffFactor: options.backoffFactor ?? 2,
+        timeoutMs: options.timeoutMs ?? 15e3
+      });
+      let json = await res.json();
+      if (json && json.contents && typeof json.contents === "string") {
+        json = JSON.parse(json.contents);
+      }
+      if (typeof json === "string") {
+        json = JSON.parse(json);
+      }
+      if (Array.isArray(json)) {
+        rawData = json;
+      }
     }
   } catch (err) {
     console.warn(`[FeedFetcher] Network query failed (${err.message}). Falling back to bundled dataset...`);
@@ -847,15 +1085,15 @@ function matchWatchlistAgainstRecalls(watchlist, incomingRecalls, options = {}) 
 }
 
 // src/server/pushService.ts
-import fs4 from "node:fs";
-import path4 from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
+import fs5 from "node:fs";
+import path5 from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 import dotenv2 from "dotenv";
 import webpush from "web-push";
-var __filename2 = fileURLToPath2(import.meta.url);
-var __dirname2 = path4.dirname(__filename2);
-dotenv2.config({ path: path4.resolve(__dirname2, "../.env") });
-var VAPID_FILE = path4.resolve(process.cwd(), "data/vapid.json");
+var __filename3 = fileURLToPath3(import.meta.url);
+var __dirname3 = path5.dirname(__filename3);
+dotenv2.config({ path: path5.resolve(__dirname3, "../.env") });
+var VAPID_FILE = path5.resolve(process.cwd(), "data/vapid.json");
 function getOrGenerateVapidKeys() {
   const envPublic = process.env.VAPID_PUBLIC_KEY;
   const envPrivate = process.env.VAPID_PRIVATE_KEY;
@@ -868,8 +1106,8 @@ function getOrGenerateVapidKeys() {
     };
   }
   try {
-    if (fs4.existsSync(VAPID_FILE)) {
-      const raw = fs4.readFileSync(VAPID_FILE, "utf8");
+    if (fs5.existsSync(VAPID_FILE)) {
+      const raw = fs5.readFileSync(VAPID_FILE, "utf8");
       const parsed = JSON.parse(raw);
       if (parsed.publicKey && parsed.privateKey) {
         return {
@@ -888,9 +1126,9 @@ function getOrGenerateVapidKeys() {
     subject: envSubject
   };
   try {
-    const dir = path4.dirname(VAPID_FILE);
-    if (!fs4.existsSync(dir)) fs4.mkdirSync(dir, { recursive: true });
-    fs4.writeFileSync(VAPID_FILE, JSON.stringify(vapidData, null, 2), "utf8");
+    const dir = path5.dirname(VAPID_FILE);
+    if (!fs5.existsSync(dir)) fs5.mkdirSync(dir, { recursive: true });
+    fs5.writeFileSync(VAPID_FILE, JSON.stringify(vapidData, null, 2), "utf8");
     console.log("[PushService] Generated and persisted new VAPID keys to data/vapid.json");
   } catch (err) {
     console.error("[PushService] Could not save vapid.json:", err);
@@ -1136,9 +1374,9 @@ async function runSyncPipeline(options = {}) {
 
 // src/server/api.ts
 import webpush2 from "web-push";
-var __filename3 = fileURLToPath3(import.meta.url);
-var __dirname3 = path5.dirname(__filename3);
-dotenv3.config({ path: path5.resolve(__dirname3, "../.env") });
+var __filename4 = fileURLToPath4(import.meta.url);
+var __dirname4 = path6.dirname(__filename4);
+dotenv3.config({ path: path6.resolve(__dirname4, "../.env") });
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -1172,6 +1410,9 @@ async function handlePipelineApiRequest(req, res, next) {
   const method = req.method || "GET";
   if (!url.startsWith("/api/")) {
     return next();
+  }
+  if (url === "/api/recalls" || url.startsWith("/api/recalls?") || url.startsWith("/api/recalls/")) {
+    return handleRecallsApiRequest(req, res);
   }
   if (method === "OPTIONS") {
     res.writeHead(204, {
@@ -1338,13 +1579,13 @@ async function handlePipelineApiRequest(req, res, next) {
 }
 
 // src/server/worker.ts
-import path6 from "node:path";
-import { fileURLToPath as fileURLToPath4 } from "node:url";
+import path7 from "node:path";
+import { fileURLToPath as fileURLToPath5 } from "node:url";
 import dotenv4 from "dotenv";
 import cron from "node-cron";
-var __filename4 = fileURLToPath4(import.meta.url);
-var __dirname4 = path6.dirname(__filename4);
-dotenv4.config({ path: path6.resolve(__dirname4, "../.env") });
+var __filename5 = fileURLToPath5(import.meta.url);
+var __dirname5 = path7.dirname(__filename5);
+dotenv4.config({ path: path7.resolve(__dirname5, "../.env") });
 var SIX_HOURS_CRON = "0 */6 * * *";
 var scheduledTask = null;
 function startSyncWorker(options = {}) {
@@ -1429,71 +1670,14 @@ if (isMain) {
 }
 
 // server.ts
-var __filename5 = fileURLToPath5(import.meta.url);
-var __dirname5 = path7.dirname(__filename5);
-dotenv5.config({ path: path7.resolve(__dirname5, "../.env") });
-dotenv5.config({ path: path7.resolve(process.cwd(), "../.env") });
-dotenv5.config({ path: path7.resolve(process.cwd(), ".env") });
+var __filename6 = fileURLToPath6(import.meta.url);
+var __dirname6 = path8.dirname(__filename6);
+dotenv5.config({ path: path8.resolve(__dirname6, "../.env") });
+dotenv5.config({ path: path8.resolve(process.cwd(), "../.env") });
+dotenv5.config({ path: path8.resolve(process.cwd(), ".env") });
 var PORT = parseInt(process.env.PORT || "3000", 10);
 var HOST = process.env.HOST || "0.0.0.0";
-var DIST_DIR = fs5.existsSync(path7.resolve(__dirname5, "dist")) ? path7.resolve(__dirname5, "dist") : path7.resolve(__dirname5, "../dist");
-var DATA_DIR2 = path7.resolve(process.cwd(), "data");
-var RECALLS_CACHE_FILE = path7.join(DATA_DIR2, "recalls-cache.json");
-var INITIAL_BUNDLED_FILE = fs5.existsSync(path7.resolve(process.cwd(), "public/data/initial-recalls.json")) ? path7.resolve(process.cwd(), "public/data/initial-recalls.json") : path7.resolve(__dirname5, "../public/data/initial-recalls.json");
-var cachedRecallsBuffer = null;
-var lastCacheFetchTime = 0;
-var CACHE_TTL_MS = 30 * 60 * 1e3;
-function getLocalFallbackRecalls() {
-  try {
-    if (fs5.existsSync(RECALLS_CACHE_FILE)) {
-      return fs5.readFileSync(RECALLS_CACHE_FILE);
-    }
-    if (fs5.existsSync(INITIAL_BUNDLED_FILE)) {
-      return fs5.readFileSync(INITIAL_BUNDLED_FILE);
-    }
-    const distBundled = path7.join(DIST_DIR, "data/initial-recalls.json");
-    if (fs5.existsSync(distBundled)) {
-      return fs5.readFileSync(distBundled);
-    }
-  } catch (err) {
-    console.warn("[Server] Error reading local fallback recalls:", err);
-  }
-  return null;
-}
-async function refreshRecallsFeed() {
-  const targetUrl = "https://recalls-rappels.canada.ca/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json";
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2e4);
-    const upstream = await fetch(targetUrl, {
-      signal: controller.signal,
-      headers: {
-        Accept: "application/json, text/plain, */*",
-        "User-Agent": "CanadaRecallAlert-Backend/1.0"
-      }
-    });
-    clearTimeout(timeout);
-    if (upstream.ok) {
-      const arrayBuf = await upstream.arrayBuffer();
-      const buf = Buffer.from(arrayBuf);
-      if (buf.length > 1e3) {
-        cachedRecallsBuffer = buf;
-        lastCacheFetchTime = Date.now();
-        if (!fs5.existsSync(DATA_DIR2)) {
-          fs5.mkdirSync(DATA_DIR2, { recursive: true });
-        }
-        fs5.writeFile(RECALLS_CACHE_FILE, buf, (err) => {
-          if (err) console.warn("[Server] Could not persist recalls cache:", err.message);
-        });
-        console.log(`[Server] Cached Health Canada recalls feed (${(buf.length / 1024 / 1024).toFixed(1)} MB).`);
-        return buf;
-      }
-    }
-  } catch (err) {
-    console.warn("[Server] Background refresh of recalls feed failed:", err.message);
-  }
-  return null;
-}
+var DIST_DIR = fs6.existsSync(path8.resolve(__dirname6, "dist")) ? path8.resolve(__dirname6, "dist") : path8.resolve(__dirname6, "../dist");
 var MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
@@ -1514,56 +1698,8 @@ var server = http.createServer(async (req, res) => {
   const url = req.url || "/";
   const method = req.method || "GET";
   if (url.startsWith("/api/")) {
-    if (url.startsWith("/api/recalls")) {
-      if (method === "OPTIONS") {
-        res.writeHead(204, {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-          "Access-Control-Max-Age": "86400"
-        });
-        return res.end();
-      }
-      const isCacheFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < CACHE_TTL_MS;
-      if (isCacheFresh && cachedRecallsBuffer) {
-        res.writeHead(200, {
-          "Content-Type": "application/json; charset=utf-8",
-          "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "public, max-age=1800"
-        });
-        return res.end(cachedRecallsBuffer);
-      }
-      if (!cachedRecallsBuffer) {
-        cachedRecallsBuffer = getLocalFallbackRecalls();
-      }
-      if (cachedRecallsBuffer) {
-        if (Date.now() - lastCacheFetchTime >= CACHE_TTL_MS) {
-          refreshRecallsFeed();
-        }
-        res.writeHead(200, {
-          "Content-Type": "application/json; charset=utf-8",
-          "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "public, max-age=1800"
-        });
-        return res.end(cachedRecallsBuffer);
-      }
-      try {
-        const freshBuf = await refreshRecallsFeed();
-        if (freshBuf) {
-          res.writeHead(200, {
-            "Content-Type": "application/json; charset=utf-8",
-            "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "public, max-age=1800"
-          });
-          return res.end(freshBuf);
-        }
-      } catch (err) {
-      }
-      res.writeHead(502, {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*"
-      });
-      return res.end(JSON.stringify({ error: "Proxy fetch failed", message: "Unable to load recall data feed" }));
+    if (url === "/api/recalls" || url.startsWith("/api/recalls?") || url.startsWith("/api/recalls/")) {
+      return handleRecallsApiRequest(req, res);
     }
     return handlePipelineApiRequest(req, res, () => {
       res.writeHead(404, {
@@ -1574,18 +1710,18 @@ var server = http.createServer(async (req, res) => {
     });
   }
   const cleanPath = url.split("?")[0];
-  let filePath = path7.join(DIST_DIR, cleanPath === "/" ? "index.html" : cleanPath);
-  if (!fs5.existsSync(filePath) || fs5.statSync(filePath).isDirectory()) {
-    filePath = path7.join(DIST_DIR, "index.html");
+  let filePath = path8.join(DIST_DIR, cleanPath === "/" ? "index.html" : cleanPath);
+  if (!fs6.existsSync(filePath) || fs6.statSync(filePath).isDirectory()) {
+    filePath = path8.join(DIST_DIR, "index.html");
   }
-  if (fs5.existsSync(filePath)) {
-    const ext = path7.extname(filePath).toLowerCase();
+  if (fs6.existsSync(filePath)) {
+    const ext = path8.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || "application/octet-stream";
     res.writeHead(200, {
       "Content-Type": contentType,
       "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable"
     });
-    fs5.createReadStream(filePath).pipe(res);
+    fs6.createReadStream(filePath).pipe(res);
   } else {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end("<h1>Canada Recall Alert</h1><p>Building or static files not found. Run <code>npm run build</code>.</p>");
@@ -1602,7 +1738,7 @@ server.on("error", (err) => {
 });
 server.listen(PORT, HOST, () => {
   console.log(`[Server] Canada Recall Alert production server running on http://${HOST}:${PORT}`);
-  console.log(`[Server] Environment loaded from: ${fs5.existsSync(path7.resolve(__dirname5, "../.env")) ? path7.resolve(__dirname5, "../.env") : "current directory"}`);
+  console.log(`[Server] Environment loaded from: ${fs6.existsSync(path8.resolve(__dirname6, "../.env")) ? path8.resolve(__dirname6, "../.env") : "current directory"}`);
   refreshRecallsFeed();
   try {
     startSyncWorker({ runOnStartupIfDue: true });

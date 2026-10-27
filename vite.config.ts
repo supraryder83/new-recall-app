@@ -80,13 +80,13 @@ export default defineConfig(({ mode }) => {
         importScripts: ['/sw-push.js'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/recalls-rappels\.canada\.ca\/.*/i,
+            urlPattern: /\/api\/recalls/i,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'canada-recalls-feed-cache',
+              cacheName: 'canada-recalls-api-cache',
               expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 86400 // 24 hours
+                maxEntries: 5,
+                maxAgeSeconds: 6 * 60 * 60 // 6 hours
               },
               cacheableResponse: {
                 statuses: [0, 200]
@@ -114,17 +114,7 @@ export default defineConfig(({ mode }) => {
         }
       }
     }
-  ],
-  server: {
-    proxy: {
-      '/api/recalls': {
-        target: 'https://recalls-rappels.canada.ca',
-        changeOrigin: true,
-        rewrite: (path) =>
-          path.replace(/^\/api\/recalls/, '/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json')
-      }
-    }
-  }
+  ]
 };
 });
 
