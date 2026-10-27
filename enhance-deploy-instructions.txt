@@ -1,0 +1,125 @@
+================================================================================
+CANADA RECALL ALERT - ENHANCE DEPLOYMENT INSTRUCTIONS
+================================================================================
+Domain/Host: 204webhosting.online (Enhance Control Panel)
+Repository: supraryder83/new-recall-app
+Branch: main
+
+These instructions correspond directly to the Enhance Control Panel screens shown
+in your screenshots (GitHub Git integration + Persistent Node.js Application).
+
+--------------------------------------------------------------------------------
+HOW THE APPLICATION ARCHITECTURE WORKS ON ENHANCE
+--------------------------------------------------------------------------------
+1. Enhance manages Git releases in `deploys/` with a symlink `deploys/current`
+   pointing to the active release.
+2. The application includes both:
+   a) A modern Progressive Web App (SPA) built to `dist/`.
+   b) A production Node.js server (`dist-server/server.mjs`) that:
+      - Serves the frontend web app.
+      - Proxies & caches the 16MB Health Canada Open Data feed at `/api/recalls`.
+      - Serves VAPID keys for Web Push at `/api/vapid-public-key`.
+      - Manages push subscriptions at `/api/push-subscribe`.
+      - Runs the 6-hour background sync worker.
+3. Enhance's web server (Nginx/Apache) handles public HTTPS (ports 80/443) and
+   reverse-proxies incoming traffic to `0.0.0.0:3000` where the Node app runs.
+
+--------------------------------------------------------------------------------
+STEP 1: CONFIGURE GITHUB DEPLOY (Screenshot 4)
+--------------------------------------------------------------------------------
+1. In Enhance, go to: Websites -> Your Website -> GitHub tab.
+2. Click "Configure" or "Configure GitHub deploy":
+   - Repository: new-recall-app (supraryder83/new-recall-app)
+   - Branch or tag: main
+   - Build script:
+     npm install && npm run build
+   - Click "Save".
+3. Click "Deploy now" (Screenshot 3).
+   - Enhance will clone the repo and run `npm install && npm run build`.
+   - The build compiles the frontend (`dist/`) AND the server (`dist-server/server.mjs`).
+   - A green checkmark will appear under Deployments when finished.
+
+--------------------------------------------------------------------------------
+STEP 2: LAUNCH THE PERSISTENT NODE.JS APP (Screenshots 1 & 2)
+--------------------------------------------------------------------------------
+CRITICAL: In your screenshot, the Node.js application was configured but the 
+dark "Launch" button at the bottom right had not been started yet. Without 
+launching the persistent app, the web server returns 502/404 for all `/api/*`
+endpoints.
+
+1. Under the "GitHub" tab, select the "Node.js" tab.
+2. Verify the configuration matches:
+   - Node.js version: 20.x, 22.x, or 26.x (Node 20 or 22 LTS recommended)
+   - Startup command: npm start
+   - Working directory: deploys/current
+   - HTTP Proxy toggle: ON (Enabled / Blue)
+     * Path: / (leave as / to proxy the whole site)
+     * Port: 3000
+     * Allow web socket proxy upgrade: Optional (leave unchecked or checked)
+3. Click the "Launch" button (bottom right of Screenshot 1).
+   - Enhance will start `npm start` (which runs `node dist-server/server.mjs`).
+   - The application will bind to `0.0.0.0:3000`.
+
+--------------------------------------------------------------------------------
+STEP 3: ENVIRONMENT VARIABLES (.env)
+--------------------------------------------------------------------------------
+Because `.env` contains secrets and is git-ignored, you configure it in Enhance:
+
+1. Click the "Files" tab at the top of Enhance.
+2. Open the `deploys/` directory (parent directory of `current`).
+3. Click "New File", name it `.env` (path: `deploys/.env`).
+4. Paste the following contents:
+
+# ------------------------------------------------------------------------------
+# Canada Recall Alert - Production Environment
+# ------------------------------------------------------------------------------
+PORT=3000
+HOST=0.0.0.0
+
+# Gemini API Key (for packaging OCR and AI product verification)
+VITE_API_KEY=YOUR_GEMINI_API_KEY
+VITE_GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+
+# Frontend Web Push Public Key
+VITE_VAPID_PUBLIC_KEY=BEWplbXClOE7-dY339tirCxloT6u_sdJfvBs0uvZQuOz4OM4ZC0uoKomdiOZOXqKEvzmaJIzMBcIxZQHbDzw3ws
+
+# Backend VAPID Credentials (RFC 8291 / 8292)
+VAPID_PUBLIC_KEY=BEWplbXClOE7-dY339tirCxloT6u_sdJfvBs0uvZQuOz4OM4ZC0uoKomdiOZOXqKEvzmaJIzMBcIxZQHbDzw3ws
+VAPID_PRIVATE_KEY=ssF7rH7kOgIerTJzoUZuaNrYpT69-uZVJ6ybmSkUml0
+VAPID_SUBJECT=mailto:support@204webhosting.online
+
+5. Click "Save".
+   *(Note: Even if `.env` is not yet created, the application now includes
+   built-in fallback keys so VAPID and the recall proxy work immediately)*
+
+--------------------------------------------------------------------------------
+STEP 4: VERIFY THE DEPLOYMENT
+--------------------------------------------------------------------------------
+Once deployed and launched, test these URLs in your browser:
+
+1. Test VAPID Key Endpoint:
+   https://your-domain/api/vapid-public-key
+   -> Expected response:
+      {"publicKey":"BEWplbXClOE7...","subject":"mailto:support@204webhosting.online"}
+
+2. Test Recall Data Feed:
+   https://your-domain/api/recalls
+   -> Expected response: Instant JSON array of Canadian recalls.
+
+3. Test Web Push in App:
+   - Open your site on mobile or desktop.
+   - Go to Settings -> Web Push Notifications.
+   - Tap "Enable Web Push Notifications".
+   - Browser prompts: "Allow notifications".
+   - Tap "Send Test Notification" -> Instant notification delivered!
+
+--------------------------------------------------------------------------------
+TROUBLESHOOTING
+--------------------------------------------------------------------------------
+- "Bad Gateway (502)":
+  The persistent app is not currently running. Go to GitHub -> Node.js and click "Launch" or "Restart".
+- "Port Conflict":
+  Ensure Enhance HTTP Proxy port is set to 3000 and the app `.env` has PORT=3000.
+- "Logs":
+  Click "View logs" in GitHub -> Deployments or check Enhance app runtime logs.
+================================================================================

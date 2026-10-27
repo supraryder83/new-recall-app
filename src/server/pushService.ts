@@ -28,7 +28,7 @@ export function getOrGenerateVapidKeys(): VapidKeys {
   // Check environment variables first
   const envPublic = process.env.VAPID_PUBLIC_KEY;
   const envPrivate = process.env.VAPID_PRIVATE_KEY;
-  const envSubject = process.env.VAPID_SUBJECT || 'mailto:alerts@canada-recall.internal';
+  const envSubject = process.env.VAPID_SUBJECT || 'mailto:support@204webhosting.online';
 
   if (envPublic && envPrivate) {
     return {
@@ -44,18 +44,21 @@ export function getOrGenerateVapidKeys(): VapidKeys {
       const raw = fs.readFileSync(VAPID_FILE, 'utf8');
       const parsed = JSON.parse(raw);
       if (parsed.publicKey && parsed.privateKey) {
-        return parsed;
+        return {
+          publicKey: parsed.publicKey,
+          privateKey: parsed.privateKey,
+          subject: parsed.subject || envSubject
+        };
       }
     }
   } catch (err) {
-    console.warn('[PushService] Error reading vapid.json, generating new keys:', err);
+    console.warn('[PushService] Error reading vapid.json:', err);
   }
 
-  // Generate fresh keys
-  const keys = webpush.generateVAPIDKeys();
+  // Pre-configured default keys for support@204webhosting.online
   const vapidData: VapidKeys = {
-    publicKey: keys.publicKey,
-    privateKey: keys.privateKey,
+    publicKey: 'BEWplbXClOE7-dY339tirCxloT6u_sdJfvBs0uvZQuOz4OM4ZC0uoKomdiOZOXqKEvzmaJIzMBcIxZQHbDzw3ws',
+    privateKey: 'ssF7rH7kOgIerTJzoUZuaNrYpT69-uZVJ6ybmSkUml0',
     subject: envSubject
   };
 

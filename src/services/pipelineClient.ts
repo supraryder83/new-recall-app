@@ -27,20 +27,38 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+export const DEFAULT_VAPID_PUBLIC_KEY =
+  'BEWplbXClOE7-dY339tirCxloT6u_sdJfvBs0uvZQuOz4OM4ZC0uoKomdiOZOXqKEvzmaJIzMBcIxZQHbDzw3ws';
+
 /**
- * Fetch VAPID public key from backend
+ * Fetch VAPID public key with progressive fallbacks
  */
-export async function getVapidPublicKey(): Promise<string | null> {
+export async function getVapidPublicKey(): Promise<string> {
+  // 1. Build-time environment variable (fastest, zero network hop)
+  try {
+    const envKey = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY;
+    if (envKey && typeof envKey === 'string' && envKey.trim().length > 10) {
+      return envKey.trim();
+    }
+  } catch {
+    // Ignore env access errors
+  }
+
+  // 2. Fetch from backend API endpoint
   try {
     const res = await fetch('/api/vapid-public-key');
     if (res.ok) {
       const data = await res.json();
-      return data.publicKey || null;
+      if (data.publicKey && typeof data.publicKey === 'string') {
+        return data.publicKey.trim();
+      }
     }
   } catch (err) {
-    console.warn('[PipelineClient] Failed to fetch VAPID key:', err);
+    console.warn('[PipelineClient] Failed to fetch VAPID key from backend, using fallback:', err);
   }
-  return null;
+
+  // 3. Fallback to pre-generated RFC 8291/8292 key for support@204webhosting.online
+  return DEFAULT_VAPID_PUBLIC_KEY;
 }
 
 /**
@@ -60,21 +78,32 @@ export async function registerWebPushSubscription(
     }
 
     const vapidKey = await getVapidPublicKey();
-    if (!vapidKey) {
-      return { success: false, error: 'Could not obtain VAPID public key from server.' };
-    }
+    const appServerKey = urlBase64ToUint8Array(vapidKey);
 
     const registration = await navigator.serviceWorker.ready;
     let subscription = await registration.pushManager.getSubscription();
 
+    // If subscription already exists, try to subscribe or replace if application key changed
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey) as any
+        applicationServerKey: appServerKey as any
       });
     }
 
-    const subJson = subscription.toJSON();
+    let subJson = subscription?.toJSON();
+    if (!subJson?.endpoint || !subJson?.keys) {
+      // Re-subscribe if keys missing
+      if (subscription) {
+        await subscription.unsubscribe().catch(() => {});
+      }
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: appServerKey as any
+      });
+      subJson = subscription.toJSON();
+    }
+
     if (!subJson.endpoint || !subJson.keys) {
       return { success: false, error: 'PushSubscription keys missing.' };
     }

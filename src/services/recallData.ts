@@ -169,7 +169,7 @@ export async function syncLiveRecallsDatabase(
     try {
       onProgress?.('Fetching latest Health Canada & CFIA recall updates...');
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 7000);
+      const timeout = setTimeout(() => controller.abort(), 25000);
       const res = await fetch(url, {
         signal: controller.signal,
         headers: { Accept: 'application/json' }

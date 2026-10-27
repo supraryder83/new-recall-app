@@ -82,9 +82,10 @@ export function startSyncWorker(options: { runOnStartupIfDue?: boolean } = {}): 
 // ==================== CLI RUNNER ====================
 // If executed directly: tsx src/server/worker.ts
 const isMain =
-  import.meta.url === `file://${process.argv[1]}` ||
-  process.argv[1]?.endsWith('worker.ts') ||
-  process.argv[1]?.endsWith('worker.js');
+  (process.argv[1]?.endsWith('worker.ts') ||
+   process.argv[1]?.endsWith('worker.js') ||
+   process.argv[1]?.endsWith('worker.mjs')) &&
+  !process.argv[1]?.includes('server');
 
 if (isMain) {
   const args = process.argv.slice(2);
