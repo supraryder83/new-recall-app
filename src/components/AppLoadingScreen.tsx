@@ -1,40 +1,75 @@
 import React, { useEffect, useState } from 'react';
+import { ShieldAlert, ExternalLink, ShieldCheck, FileText } from 'lucide-react';
 
 interface AppLoadingScreenProps {
   isLoading: boolean;
-  progressPercent: number;
-  statusText: string;
+  onOpenLegal?: (tab: 'privacy' | 'terms') => void;
 }
 
 export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
   isLoading,
-  progressPercent,
-  statusText
+  onOpenLegal
 }) => {
-  const [shouldRender, setShouldRender] = useState(isLoading);
+  const [progress, setProgress] = useState(0);
+  const [statusText, setStatusText] = useState('Connecting to Canadian Open Data safety registry...');
+  const [hasCompleted4Seconds, setHasCompleted4Seconds] = useState(false);
+  const [shouldRender, setShouldRender] = useState(true);
   const [isFadingOut, setIsFadingOut] = useState(false);
 
+  // Exact 4-second progress timeline
   useEffect(() => {
-    if (!isLoading) {
-      setIsFadingOut(true);
-      const timer = setTimeout(() => {
-        setShouldRender(false);
-      }, 450); // Matches fade-out transition duration
-      return () => clearTimeout(timer);
-    } else {
-      setShouldRender(true);
-      setIsFadingOut(false);
+    const startTime = Date.now();
+    const duration = 4000; // Exact 4 seconds requirement
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const fraction = Math.min(elapsed / duration, 1);
+      const currentPercent = Math.round(fraction * 100);
+
+      setProgress(currentPercent);
+
+      // Dynamic phase messages across the 4 seconds
+      if (currentPercent < 28) {
+        setStatusText('Connecting to Canadian Open Data safety registry...');
+      } else if (currentPercent < 62) {
+        setStatusText('Updating Canadian safety recall database (34,000+ notices)...');
+      } else if (currentPercent < 88) {
+        setStatusText('Checking your scan history against latest Canadian recalls...');
+      } else if (currentPercent < 100) {
+        setStatusText('Finalizing recall verification & safety checks...');
+      } else {
+        setStatusText('All clear! Recall database updated & history verified.');
+      }
+
+      if (fraction >= 1) {
+        clearInterval(interval);
+        setHasCompleted4Seconds(true);
+      }
+    }, 40);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Dismiss only once BOTH the 4-second duration has elapsed AND background loading is complete
+  useEffect(() => {
+    if (hasCompleted4Seconds && !isLoading) {
+      const delayTimer = setTimeout(() => {
+        setIsFadingOut(true);
+        const unmountTimer = setTimeout(() => {
+          setShouldRender(false);
+        }, 450); // Matches CSS transition duration
+        return () => clearTimeout(unmountTimer);
+      }, 250);
+      return () => clearTimeout(delayTimer);
     }
-  }, [isLoading]);
+  }, [hasCompleted4Seconds, isLoading]);
 
   if (!shouldRender) return null;
-
-  const clampedPercent = Math.min(Math.max(Math.round(progressPercent), 5), 100);
 
   return (
     <div
       id="app-initial-loading-screen"
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 bg-slate-950 text-white transition-opacity duration-400 ease-out select-none ${
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-between p-4 sm:p-6 bg-slate-950 text-white transition-opacity duration-400 ease-out select-none overflow-y-auto ${
         isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
       aria-label="Loading Canada Recall Alert"
@@ -45,20 +80,28 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
       <div className="absolute w-96 h-96 rounded-full bg-rose-600/15 blur-3xl pointer-events-none -bottom-10 -right-10" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(220,38,38,0.12)_0%,transparent_70%)] pointer-events-none" />
 
-      <div className="relative z-10 flex flex-col items-center text-center max-w-sm w-full mx-auto animate-in fade-in zoom-in-95 duration-300">
+      {/* Top spacer */}
+      <div className="w-full flex justify-end shrink-0 pt-1">
+        <span className="text-[10px] font-mono text-slate-500 font-semibold uppercase tracking-wider">
+          v2.0 • 4s Initializing
+        </span>
+      </div>
+
+      {/* Center Hero: Logo, Title, Progress Bar */}
+      <div className="relative z-10 flex flex-col items-center text-center max-w-sm sm:max-w-md w-full mx-auto my-auto py-4 animate-in fade-in zoom-in-95 duration-300">
         {/* Logo Container with gentle pulse and glow */}
-        <div className="relative mb-6">
+        <div className="relative mb-5">
           <div className="absolute inset-0 bg-red-600/30 rounded-3xl blur-xl transform scale-110 animate-pulse pointer-events-none" />
           <img
             src="/icons/app-logo.png"
             alt="Canada Recall Alert Logo"
-            className="relative w-28 h-28 sm:w-32 sm:h-32 object-contain drop-shadow-[0_12px_24px_rgba(220,38,38,0.4)] animate-in zoom-in duration-500"
+            className="relative w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_12px_24px_rgba(220,38,38,0.4)] animate-in zoom-in duration-500"
           />
         </div>
 
         {/* App Title & Badge */}
-        <div className="space-y-1.5 mb-6">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-[10px] font-extrabold uppercase tracking-widest">
+        <div className="space-y-1 mb-5">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-[10px] font-extrabold uppercase tracking-widest">
             <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
             <span>Canadian Safety Monitor</span>
           </div>
@@ -66,18 +109,18 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
             Canada Recall Alert
           </h1>
           <p className="text-xs text-slate-400 font-medium">
-            Health Canada, CFIA & Transport Canada Official Notices
+            Health Canada, CFIA & Transport Canada Public Safety Notices
           </p>
         </div>
 
         {/* Progress Bar Container */}
-        <div className="w-full max-w-xs space-y-2.5">
+        <div className="w-full max-w-xs space-y-2 mb-4">
           {/* Track */}
           <div className="w-full h-2 bg-slate-800/90 rounded-full overflow-hidden p-0.5 border border-slate-700/60 shadow-inner">
             {/* Fill */}
             <div
-              className="h-full rounded-full bg-linear-to-r from-red-600 via-rose-500 to-amber-400 transition-all duration-300 ease-out relative shadow-[0_0_12px_rgba(239,68,68,0.6)]"
-              style={{ width: `${clampedPercent}%` }}
+              className="h-full rounded-full bg-linear-to-r from-red-600 via-rose-500 to-amber-400 transition-all duration-75 ease-out relative shadow-[0_0_12px_rgba(239,68,68,0.6)]"
+              style={{ width: `${progress}%` }}
             >
               {/* Shimmer light effect */}
               <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
@@ -90,15 +133,62 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
               {statusText}
             </span>
             <span className="shrink-0 font-mono text-slate-300 font-bold">
-              {clampedPercent}%
+              {progress}%
             </span>
           </div>
         </div>
+      </div>
 
-        {/* Subtle bottom note */}
-        <p className="mt-8 text-[10px] text-slate-500 tracking-wide font-medium">
-          Verifying 34,000+ Canadian safety notices
-        </p>
+      {/* Mandatory Legal, Open Data Licence & Ownership Disclaimer */}
+      <div className="relative z-10 w-full max-w-md mx-auto space-y-2 pt-2 pb-1 shrink-0 text-center">
+        <div className="p-3 bg-slate-900/90 border border-slate-800/90 rounded-2xl text-[10px] sm:text-[11px] text-slate-400 leading-relaxed shadow-lg backdrop-blur-xs">
+          <div className="flex items-center justify-center gap-1.5 text-slate-300 font-bold mb-1">
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Open Government Licence & Non-Endorsement</span>
+          </div>
+          <p>
+            Contains information licensed under the{' '}
+            <a
+              href="https://open.canada.ca/en/open-government-licence-canada"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-red-400 font-bold underline hover:text-red-300 inline-flex items-center gap-0.5"
+            >
+              <span>Open Government Licence – Canada</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+            . This independent application is <strong>not endorsed by, sponsored by, or affiliated with</strong> the Government of Canada, Health Canada, the Canadian Food Inspection Agency (CFIA), or Transport Canada.
+          </p>
+        </div>
+
+        {/* Ownership by Tyler Ziegler & Policy links */}
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-slate-400 pt-0.5">
+          <span className="text-slate-300 font-semibold">
+            Owned & operated by <strong>Tyler Ziegler</strong>
+          </span>
+          <span className="text-slate-600">•</span>
+          {onOpenLegal ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onOpenLegal('privacy')}
+                className="text-slate-400 hover:text-red-400 underline font-medium transition-colors"
+              >
+                Privacy Policy
+              </button>
+              <span className="text-slate-600">•</span>
+              <button
+                type="button"
+                onClick={() => onOpenLegal('terms')}
+                className="text-slate-400 hover:text-red-400 underline font-medium transition-colors"
+              >
+                Terms of Service
+              </button>
+            </>
+          ) : (
+            <span className="text-slate-500">Privacy & Terms Protected</span>
+          )}
+        </div>
       </div>
     </div>
   );

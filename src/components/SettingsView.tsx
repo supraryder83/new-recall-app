@@ -14,7 +14,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   VolumeX,
-  ShieldAlert
+  ShieldAlert,
+  Shield,
+  ShieldCheck,
+  FileText
 } from 'lucide-react';
 import { playRecallAlarmSound, stopRecallAlarmSound } from '../services/alarmSound';
 import { recallStorage } from '../services/storage';
@@ -36,6 +39,7 @@ interface SettingsViewProps {
   canInstallPwa: boolean;
   onInstallPwa: () => void;
   onNavigateToHistory?: () => void;
+  onOpenLegal?: (tab: 'privacy' | 'terms') => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -43,7 +47,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onRefreshFeed,
   canInstallPwa,
   onInstallPwa,
-  onNavigateToHistory
+  onNavigateToHistory,
+  onOpenLegal
 }) => {
   const [workerStatus, setWorkerStatus] = useState<WorkerStatusResponse | null>(null);
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
@@ -473,6 +478,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       )}
 
+      {/* Ownership, Privacy Policy & Terms of Service */}
+      <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3 text-xs text-slate-600">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-slate-900 font-bold">
+            <Shield className="w-4 h-4 text-red-600" />
+            <span>Ownership & Legal Disclosures</span>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+            Tyler Ziegler
+          </span>
+        </div>
+
+        <p className="leading-relaxed">
+          This site is <strong>owned and operated by Tyler Ziegler</strong>. It provides public Canadian safety recall cross-referencing and alerts for consumer products, foods, health items, and vehicles.
+        </p>
+
+        {onOpenLegal && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => onOpenLegal('privacy')}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors border border-slate-200 shadow-2xs active:scale-95"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Privacy Policy</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenLegal('terms')}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors border border-slate-200 shadow-2xs active:scale-95"
+            >
+              <FileText className="w-3.5 h-3.5 text-blue-600" />
+              <span>Terms of Service</span>
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Official Data Source info */}
       <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-2 text-xs text-slate-600">
         <div className="flex items-center gap-2 text-slate-900 font-bold">
@@ -485,7 +528,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </p>
         <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
           <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-xl text-[11px] text-slate-600 leading-relaxed">
-            <strong className="text-slate-800">Non-Endorsement Disclaimer:</strong> This application is an independent public safety utility. It is not endorsed by, sponsored by, or affiliated with Health Canada, CFIA, Transport Canada, or the Government of Canada.
+            <strong className="text-slate-800">Non-Endorsement Disclaimer:</strong> This application is an independent public safety utility owned and operated by Tyler Ziegler. It is not endorsed by, sponsored by, or affiliated with Health Canada, CFIA, Transport Canada, or the Government of Canada.
           </div>
           <a
             href="https://recalls-rappels.canada.ca/"

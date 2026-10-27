@@ -22,6 +22,7 @@ interface SidebarProps {
   onRefreshFeed: () => void;
   canInstallPwa: boolean;
   onInstallPwa: () => void;
+  onOpenLegal?: (tab: 'privacy' | 'terms') => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -31,7 +32,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   syncState,
   onRefreshFeed,
   canInstallPwa,
-  onInstallPwa
+  onInstallPwa,
+  onOpenLegal
 }) => {
   const formatSyncTime = (timestamp: number | null) => {
     if (!timestamp) return 'Never';
@@ -212,6 +214,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Portal</span>
             <ExternalLink className="w-3 h-3" />
           </a>
+        </div>
+
+        {/* Ownership & Legal notice */}
+        <div className="pt-2 border-t border-slate-200/70 text-[10px] text-slate-500 space-y-1 px-1">
+          <div className="leading-tight">
+            Owned & operated by <strong className="text-slate-700">Tyler Ziegler</strong>
+          </div>
+          {onOpenLegal && (
+            <div className="flex items-center gap-2 text-slate-400">
+              <button
+                type="button"
+                onClick={() => onOpenLegal('privacy')}
+                className="hover:text-red-600 underline transition-colors"
+              >
+                Privacy Policy
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => onOpenLegal('terms')}
+                className="hover:text-red-600 underline transition-colors"
+              >
+                Terms of Service
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </aside>

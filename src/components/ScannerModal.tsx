@@ -88,10 +88,6 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
   const [hasKey, setHasKey] = useState(hasGeminiApiKey());
   const [quickApiKey, setQuickApiKey] = useState('');
   const [showKeyForm, setShowKeyForm] = useState(false);
-
-  // Barcode detection and manual lookup state
-  const [showManualCodeInput, setShowManualCodeInput] = useState(false);
-  const [manualCode, setManualCode] = useState('');
   const runBarcodeVerificationRef = useRef<((code: string) => Promise<void>) | null>(null);
   const isAutoScanningBarcodeRef = useRef(false);
 
@@ -1023,9 +1019,9 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
             </form>
           )}
 
-          {/* Secondary Actions: Skip Tag Photo or Enter Barcode Manually */}
-          <div className="flex items-center justify-center gap-2 flex-wrap">
-            {photoStep === 2 && (
+          {/* Secondary Action: Skip Tag Photo */}
+          {photoStep === 2 && (
+            <div className="flex items-center justify-center">
               <button
                 type="button"
                 onClick={handleSkipTagStep}
@@ -1034,44 +1030,7 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
                 <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
                 <span>No Tag? Verify Item Only</span>
               </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setShowManualCodeInput(!showManualCodeInput)}
-              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 border border-white/15 text-white/90 rounded-full text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
-            >
-              <Tag className="w-3.5 h-3.5 text-amber-400" />
-              <span>{showManualCodeInput ? 'Hide Code Entry' : 'Type Barcode / Model #'}</span>
-            </button>
-          </div>
-
-          {/* Manual Code Input Form */}
-          {showManualCodeInput && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (manualCode.trim()) {
-                  runBarcodeVerification(manualCode.trim());
-                }
-              }}
-              className="flex gap-2 max-w-sm mx-auto w-full"
-            >
-              <input
-                type="text"
-                placeholder="Enter UPC, barcode, or model #"
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500 font-mono"
-                autoFocus
-              />
-              <button
-                type="submit"
-                className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shrink-0"
-              >
-                Check
-              </button>
-            </form>
+            </div>
           )}
 
           {/* Primary Controls Row: Torch | Shutter | Flip | Upload */}
