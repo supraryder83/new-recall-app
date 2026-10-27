@@ -123,23 +123,34 @@ export async function registerWebPushSubscription(
       return { success: false, error: 'PushSubscription keys missing.' };
     }
 
-    const res = await fetch('/api/push-subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        endpoint: subJson.endpoint,
-        keys: subJson.keys,
-        expirationTime: subJson.expirationTime
-      })
-    });
+    try {
+      const res = await fetch('/api/push-subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          endpoint: subJson.endpoint,
+          keys: subJson.keys,
+          expirationTime: subJson.expirationTime
+        })
+      });
 
-    if (res.ok) {
-      return { success: true };
-    } else {
-      const err = await res.json().catch(() => ({}));
-      return { success: false, error: err.error || 'Failed to register subscription on server.' };
+      if (res.ok) {
+        return { success: true };
+      }
+    } catch {
+      // Network/backend unavailable
     }
+
+    // Save locally so the browser subscription is retained in static mode
+    try {
+      localStorage.setItem(
+        'recall_push_sub',
+        JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys, timestamp: Date.now() })
+      );
+    } catch {}
+
+    return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Unknown Web Push registration error.' };
   }

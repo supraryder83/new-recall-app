@@ -4,9 +4,10 @@ import { recallStorage } from './storage';
 export const PRIMARY_FEED_URL =
   'https://recalls-rappels.canada.ca/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json';
 
-// Proxy paths (Vite dev proxy first, then fast public gateways)
+// Proxy paths (Vite dev proxy first, then local bundled data, then fast public gateways)
 export const PROXY_ENDPOINTS = [
   '/api/recalls',
+  '/data/initial-recalls.json',
   'https://api.allorigins.win/raw?url=' + encodeURIComponent(PRIMARY_FEED_URL),
   'https://corsproxy.io/?url=' + encodeURIComponent(PRIMARY_FEED_URL)
 ];
@@ -162,8 +163,8 @@ export async function syncLiveRecallsDatabase(
 ): Promise<FetchFeedResult> {
   onProgress?.('Connecting to Canadian Open Data safety registry...');
 
-  // Try Vite dev proxy first (/api/recalls), then direct Open Data URL, then CORS proxies
-  const candidateUrls = ['/api/recalls', PRIMARY_FEED_URL, ...PROXY_ENDPOINTS.slice(1)];
+  // Try /api/recalls first (backend), then /data/initial-recalls.json (static fallback), then external feeds
+  const candidateUrls = ['/api/recalls', '/data/initial-recalls.json', PRIMARY_FEED_URL, ...PROXY_ENDPOINTS.slice(2)];
 
   for (const url of candidateUrls) {
     try {
