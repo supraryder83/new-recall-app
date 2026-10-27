@@ -1,8 +1,18 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
+import './env.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { pipelineStore } from './store.ts';
 import { runSyncPipeline } from './pipeline.ts';
 import { initVapid } from './pushService.ts';
 import webpush from 'web-push';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Explicitly load .env from parent directory (e.g. deploy/.env)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 function parseJsonBody<T>(req: IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {

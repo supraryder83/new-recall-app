@@ -10,10 +10,7 @@ import {
   Clock,
   Bell,
   BellRing,
-  CheckCircle2,
-  AlertTriangle,
-  Send,
-  ShieldAlert
+  Send
 } from 'lucide-react';
 import { recallStorage } from '../services/storage';
 import type { DatasetSyncState } from '../types/recall';

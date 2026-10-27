@@ -9,10 +9,8 @@ import {
 } from 'lucide-react';
 import type { RecallItem, CategoryFilter, DatasetSyncState, ScanHistoryItem } from './types/recall';
 import {
-  fetchRecallsData,
   filterRecalls,
-  loadInstantCachedRecalls,
-  syncLiveRecallsDatabase
+  loadInstantCachedRecalls
 } from './services/recallData';
 import { recallStorage } from './services/storage';
 import {

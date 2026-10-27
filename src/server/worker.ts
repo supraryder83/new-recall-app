@@ -1,7 +1,17 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
+import './env.ts';
 import cron, { type ScheduledTask } from 'node-cron';
 import { runSyncPipeline } from './pipeline.ts';
 import { pipelineStore } from './store.ts';
 import { initVapid } from './pushService.ts';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Explicitly load .env from parent directory (e.g. deploy/.env)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 export const SIX_HOURS_CRON = '0 */6 * * *';
 

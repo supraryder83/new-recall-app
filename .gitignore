@@ -14,7 +14,10 @@ dist-ssr
 
 # Environment variables
 .env
+.env.local
 .env.*
+deploy/.env
+deploy/*.env
 !.env.example
 *.env
 

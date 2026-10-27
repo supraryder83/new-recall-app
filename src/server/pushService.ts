@@ -1,8 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
+import './env.ts';
 import webpush from 'web-push';
 import type { UserMatchGroup } from '../types/pipeline';
 import { pipelineStore, type PipelineStore } from './store';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Explicitly load .env from parent directory (e.g. deploy/.env)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const VAPID_FILE = path.resolve(process.cwd(), 'data/vapid.json');
 
