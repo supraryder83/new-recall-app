@@ -21,10 +21,14 @@ import { startSyncWorker } from './src/server/worker.ts';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
-const DIST_DIR = path.resolve(__dirname, 'dist');
+const DIST_DIR = fs.existsSync(path.resolve(__dirname, 'dist'))
+  ? path.resolve(__dirname, 'dist')
+  : path.resolve(__dirname, '../dist');
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const RECALLS_CACHE_FILE = path.join(DATA_DIR, 'recalls-cache.json');
-const INITIAL_BUNDLED_FILE = path.resolve(process.cwd(), 'public/data/initial-recalls.json');
+const INITIAL_BUNDLED_FILE = fs.existsSync(path.resolve(process.cwd(), 'public/data/initial-recalls.json'))
+  ? path.resolve(process.cwd(), 'public/data/initial-recalls.json')
+  : path.resolve(__dirname, '../public/data/initial-recalls.json');
 
 // In-memory cache for the 16MB Health Canada Open Data feed
 let cachedRecallsBuffer: Buffer | null = null;
