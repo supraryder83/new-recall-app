@@ -291,16 +291,37 @@ export function filterRecalls(
 
   // Split multi-word query
   const queryTokens = cleanQuery.split(/\s+/).filter(Boolean);
+  const digitsOnly = cleanQuery.replace(/[^0-9]/g, '');
+  const digitsNoLeadingZero = digitsOnly.replace(/^0+/, '');
 
   const matched = filtered.filter((item) => {
     const title = (item.Title || '').toLowerCase();
     const product = (item.Product || '').toLowerCase();
     const issue = (item.Issue || '').toLowerCase();
     const whatToDo = (item['What you should do'] || '').toLowerCase();
+    const org = (item.Organization || '').toLowerCase();
     const nid = (item.NID || '').toLowerCase();
-    const fullText = `${title} ${product} ${issue} ${whatToDo} ${nid}`;
+    const fullText = `${title} ${product} ${issue} ${whatToDo} ${org} ${nid}`;
 
-    return queryTokens.every((token) => fullText.includes(token));
+    // Barcode number search: Check digits-only text to match barcodes formatted with spaces or dashes
+    if (digitsOnly.length >= 8) {
+      const fullDigits = fullText.replace(/[^0-9]/g, '');
+      if (
+        fullDigits.includes(digitsOnly) ||
+        (digitsNoLeadingZero.length >= 7 && fullDigits.includes(digitsNoLeadingZero)) ||
+        fullDigits.includes('0' + digitsOnly)
+      ) {
+        return true;
+      }
+    }
+
+    return queryTokens.every((token) => {
+      if (fullText.includes(token)) return true;
+      // Stem match (plural / singular)
+      if (token.endsWith('s') && fullText.includes(token.slice(0, -1))) return true;
+      if (!token.endsWith('s') && fullText.includes(token + 's')) return true;
+      return false;
+    });
   });
 
   // Sort matched: prioritize title/product matches first, then date
@@ -327,11 +348,29 @@ export function findRecallsByCodeOrQuery(
   if (!code) return [];
 
   const digitsOnly = code.replace(/[^0-9]/g, '');
+  const digitsNoLeadingZero = digitsOnly.replace(/^0+/, '');
 
   return items.filter((item) => {
-    const fullText = `${item.Title} ${item.Product} ${item.Issue} ${item['What you should do']}`.toLowerCase();
+    const title = (item.Title || '').toLowerCase();
+    const product = (item.Product || '').toLowerCase();
+    const issue = (item.Issue || '').toLowerCase();
+    const whatToDo = (item['What you should do'] || '').toLowerCase();
+    const org = (item.Organization || '').toLowerCase();
+    const nid = (item.NID || '').toLowerCase();
+    const fullText = `${title} ${product} ${issue} ${whatToDo} ${org} ${nid}`;
+
     if (fullText.includes(code)) return true;
-    if (digitsOnly.length >= 8 && fullText.includes(digitsOnly)) return true;
+
+    if (digitsOnly.length >= 7) {
+      const fullDigits = fullText.replace(/[^0-9]/g, '');
+      if (
+        fullDigits.includes(digitsOnly) ||
+        (digitsNoLeadingZero.length >= 7 && fullDigits.includes(digitsNoLeadingZero)) ||
+        fullDigits.includes('0' + digitsOnly)
+      ) {
+        return true;
+      }
+    }
     return false;
   });
 }

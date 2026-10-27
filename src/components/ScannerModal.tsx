@@ -25,11 +25,13 @@ import type { RecallItem, ScanMatchResult } from '../types/recall';
 import {
   hasGeminiApiKey,
   analyzeProductImageWithGemini,
+  resolveBarcodeWithGemini,
   setGeminiApiKey
 } from '../services/gemini';
 import { optimizeImage } from '../utils/imageOptimizer';
 import { addScanToHistory } from '../services/scanHistory';
 import { recordNotifiedRecall } from '../services/historyMonitor';
+import { playRecallAlarmSound } from '../services/alarmSound';
 
 export type PhotoStep = 1 | 2;
 export type ModalFlowState = 'camera' | 'analyzing' | 'result';
@@ -86,6 +88,45 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
   const [hasKey, setHasKey] = useState(hasGeminiApiKey());
   const [quickApiKey, setQuickApiKey] = useState('');
   const [showKeyForm, setShowKeyForm] = useState(false);
+
+  // Barcode detection and manual lookup state
+  const [showManualCodeInput, setShowManualCodeInput] = useState(false);
+  const [manualCode, setManualCode] = useState('');
+  const [detectedBarcode, setDetectedBarcode] = useState<string | null>(null);
+
+  // Native BarcodeDetector scanning loop from video stream
+  useEffect(() => {
+    if (!isOpen || flowState !== 'camera' || !cameraActive || !videoRef.current) return;
+    if (typeof window === 'undefined' || !('BarcodeDetector' in window)) return;
+
+    let isCancelled = false;
+    let detector: any = null;
+    try {
+      detector = new (window as any).BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code']
+      });
+    } catch {
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      if (isCancelled || !videoRef.current || videoRef.current.readyState < 2) return;
+      try {
+        const barcodes = await detector.detect(videoRef.current);
+        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+          const raw = barcodes[0].rawValue.trim();
+          if (raw && raw !== detectedBarcode) {
+            setDetectedBarcode(raw);
+          }
+        }
+      } catch {}
+    }, 400);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [isOpen, flowState, cameraActive, detectedBarcode]);
 
   const handleSaveQuickKey = (e: React.FormEvent) => {
     e.preventDefault();
@@ -386,7 +427,11 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
         }
       }
 
-      if (result.verdict === 'NO_RECALL_FOUND') {
+      if (result.verdict === 'MATCH_FOUND') {
+        try {
+          playRecallAlarmSound(6);
+        } catch {}
+      } else if (result.verdict === 'NO_RECALL_FOUND') {
         confetti({
           particleCount: 60,
           spread: 70,
@@ -401,6 +446,70 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
       );
       setFlowState('camera');
       // Resume camera
+      await startCamera(undefined, facingMode);
+    } finally {
+      setAnalyzingStep('');
+    }
+  };
+
+  // Run verification directly on a barcode or model code
+  const runBarcodeVerification = async (barcodeOrCode: string) => {
+    stopCamera();
+    setFlowState('analyzing');
+    setAnalysisError(null);
+    setScanResult(null);
+
+    try {
+      const clean = barcodeOrCode.trim();
+      setAnalyzingStep(`Checking code "${clean}" against 34,287 Canadian safety notices...`);
+
+      const result = await resolveBarcodeWithGemini(clean, recallsDataset);
+      setScanResult(result);
+      setFlowState('result');
+
+      // Save scan to persistent history
+      const savedItem = addScanToHistory({
+        identifiedTitle: result.identifiedTitle || `Code ${clean}`,
+        verdict: result.verdict,
+        matchReason: result.matchReason,
+        matchedRecallsCount: result.matchedRecalls.length,
+        extractedInfo: result.extractedInfo,
+        matchedRecalls: result.matchedRecalls,
+        similarProductRecalls: result.similarProductRecalls,
+        relatedBrandRecalls: result.relatedBrandRecalls,
+        searchKeywords: result.searchKeywords
+      });
+
+      // Record for 6-hour background monitoring
+      if (result.matchedRecalls && result.matchedRecalls.length > 0) {
+        for (const recall of result.matchedRecalls) {
+          recordNotifiedRecall({
+            key: `${savedItem.id}_${recall.NID}`,
+            itemId: savedItem.id,
+            itemTitle: savedItem.identifiedTitle,
+            recallNid: recall.NID,
+            recallTitle: recall.Title,
+            hazard: recall.Issue,
+            notifiedAt: Date.now()
+          });
+        }
+      }
+
+      if (result.verdict === 'MATCH_FOUND') {
+        try {
+          playRecallAlarmSound(6);
+        } catch {}
+      } else if (result.verdict === 'NO_RECALL_FOUND') {
+        confetti({
+          particleCount: 60,
+          spread: 70,
+          origin: { y: 0.65 }
+        });
+      }
+    } catch (err: any) {
+      console.error('Barcode verification failed:', err);
+      setAnalysisError(err?.message || 'Failed to verify code.');
+      setFlowState('camera');
       await startCamera(undefined, facingMode);
     } finally {
       setAnalyzingStep('');
@@ -765,6 +874,37 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
          ========================================================================= */}
       {flowState === 'camera' && (
         <div className="relative flex-1 flex flex-col items-center justify-center p-4 pointer-events-none">
+          {/* Live Detected Barcode Notification Banner in Viewfinder */}
+          {detectedBarcode && (
+            <div className="pointer-events-auto absolute top-3 inset-x-4 z-40 bg-slate-900/95 border-2 border-amber-400 text-white rounded-2xl p-3 shadow-2xl backdrop-blur-md flex items-center justify-between gap-2.5 animate-in fade-in slide-in-from-top-2">
+              <div className="min-w-0">
+                <span className="block text-[10px] font-extrabold text-amber-400 uppercase tracking-wider">
+                  ⚡ Barcode Found in Camera
+                </span>
+                <span className="block text-xs font-mono font-bold text-white truncate">
+                  {detectedBarcode}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => runBarcodeVerification(detectedBarcode)}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all"
+                >
+                  Verify Barcode
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetectedBarcode(null)}
+                  className="p-1 text-white/60 hover:text-white"
+                  aria-label="Dismiss barcode"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Step 1: Overall Product Guide Frame */}
           {photoStep === 1 && (
             <div className="relative w-[85%] max-w-sm aspect-[4/5] rounded-3xl border-2 border-white/50 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] flex flex-col justify-between p-4 transition-all">
@@ -896,18 +1036,55 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
             </form>
           )}
 
-          {/* Step 2 Secondary Action: Skip Tag Photo */}
-          {photoStep === 2 && (
-            <div className="flex items-center justify-center gap-2">
+          {/* Secondary Actions: Skip Tag Photo or Enter Barcode Manually */}
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            {photoStep === 2 && (
               <button
                 type="button"
                 onClick={handleSkipTagStep}
-                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-sm"
+                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-sm"
               >
                 <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
-                <span>No Tag / Model Sticker? Verify Item Only</span>
+                <span>No Tag? Verify Item Only</span>
               </button>
-            </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowManualCodeInput(!showManualCodeInput)}
+              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 border border-white/15 text-white/90 rounded-full text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
+            >
+              <Tag className="w-3.5 h-3.5 text-amber-400" />
+              <span>{showManualCodeInput ? 'Hide Code Entry' : 'Type Barcode / Model #'}</span>
+            </button>
+          </div>
+
+          {/* Manual Code Input Form */}
+          {showManualCodeInput && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (manualCode.trim()) {
+                  runBarcodeVerification(manualCode.trim());
+                }
+              }}
+              className="flex gap-2 max-w-sm mx-auto w-full"
+            >
+              <input
+                type="text"
+                placeholder="Enter UPC, barcode, or model #"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500 font-mono"
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shrink-0"
+              >
+                Check
+              </button>
+            </form>
           )}
 
           {/* Primary Controls Row: Torch | Shutter | Flip | Upload */}
@@ -1050,6 +1227,8 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
               className={`p-5 rounded-2xl border text-left shadow-sm ${
                 scanResult.verdict === 'MATCH_FOUND'
                   ? 'bg-red-50 border-red-200 text-red-950'
+                  : scanResult.verdict === 'POSSIBLE_MATCH'
+                  ? 'bg-amber-50 border-amber-300 text-amber-950'
                   : 'bg-emerald-50 border-emerald-200 text-emerald-950'
               }`}
             >
@@ -1058,11 +1237,15 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
                   className={`p-3 rounded-2xl shrink-0 ${
                     scanResult.verdict === 'MATCH_FOUND'
                       ? 'bg-red-600 text-white shadow-lg shadow-red-500/30'
+                      : scanResult.verdict === 'POSSIBLE_MATCH'
+                      ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
                       : 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
                   }`}
                 >
                   {scanResult.verdict === 'MATCH_FOUND' ? (
                     <ShieldAlert className="w-6 h-6 animate-pulse" />
+                  ) : scanResult.verdict === 'POSSIBLE_MATCH' ? (
+                    <AlertTriangle className="w-6 h-6 animate-pulse" />
                   ) : (
                     <ShieldCheck className="w-6 h-6" />
                   )}
@@ -1071,6 +1254,8 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
                   <h4 className="font-extrabold text-base sm:text-lg">
                     {scanResult.verdict === 'MATCH_FOUND'
                       ? 'Exact Product Safety Recall Confirmed!'
+                      : scanResult.verdict === 'POSSIBLE_MATCH'
+                      ? 'Potential Recall Found for Related Model!'
                       : 'No Active Recall For This Product'}
                   </h4>
                   <p className="text-xs sm:text-sm mt-1 opacity-90 leading-relaxed">
@@ -1296,6 +1481,103 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
                               className="text-xs text-slate-600 hover:text-red-600 font-semibold flex items-center gap-1 underline underline-offset-2 transition-colors py-1"
                             >
                               <span>Official Government Webpage</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Similar Variations & Product Line Recalls */}
+            {scanResult.similarProductRecalls && scanResult.similarProductRecalls.length > 0 && (
+              <div className="space-y-3.5 text-left pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <span>Related Product Line Recalls ({scanResult.similarProductRecalls.length})</span>
+                  </span>
+                  <span className="text-[11px] text-amber-800 font-semibold">Inspect affected models</span>
+                </div>
+
+                <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-1">
+                  {scanResult.similarProductRecalls.map((recall, index) => {
+                    const recallClass = (recall['Recall class'] || '').trim();
+                    return (
+                      <div
+                        key={`similar_${recall.NID || index}`}
+                        className="p-4 sm:p-5 bg-amber-50/70 border-2 border-amber-300 hover:border-amber-400 rounded-2xl shadow-sm text-left space-y-3 transition-all"
+                      >
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="bg-amber-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">
+                            Related Model Notice
+                          </span>
+                          {recallClass && (
+                            <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded">
+                              {recallClass}
+                            </span>
+                          )}
+                          {recall.NID && (
+                            <span className="bg-white text-slate-500 border border-slate-200 font-mono text-[10px] px-2 py-0.5 rounded">
+                              ID: #{recall.NID}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1 ml-auto">
+                            <Calendar className="w-3 h-3 text-slate-400" />
+                            {recall['Last updated']}
+                          </span>
+                        </div>
+
+                        <h4 className="font-extrabold text-sm sm:text-base text-slate-900 leading-snug">
+                          {recall.Title}
+                        </h4>
+
+                        <div className="p-3 bg-white border border-amber-200 rounded-xl space-y-1">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 flex items-center gap-1">
+                            <Tag className="w-3 h-3 text-amber-600" />
+                            <span>Affected Products & Models</span>
+                          </span>
+                          <p className="text-xs sm:text-sm font-semibold text-slate-900 leading-relaxed whitespace-pre-line">
+                            {recall.Product || recall.Title}
+                          </p>
+                        </div>
+
+                        {recall.Issue && (
+                          <div className="p-2.5 bg-red-50/80 border border-red-200 rounded-xl space-y-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-red-700 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-red-600" />
+                              <span>Hazard</span>
+                            </span>
+                            <p className="text-xs text-red-950 font-medium leading-relaxed">
+                              {recall.Issue}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-amber-200/70">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectRecall(recall);
+                              onClose();
+                            }}
+                            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
+                          >
+                            <span>Open Full Notice</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+
+                          {recall.URL && (
+                            <a
+                              href={recall.URL}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-slate-600 hover:text-amber-700 font-semibold flex items-center gap-1 underline underline-offset-2 transition-colors py-1"
+                            >
+                              <span>Official Notice</span>
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           )}

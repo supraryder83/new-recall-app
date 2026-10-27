@@ -116,8 +116,22 @@ export async function checkBarcodeRecalls(
 
   // Step 1: Check for direct barcode number matches in the 34,287 Canadian recalls
   const directMatches = recallsDataset.filter((item) => {
-    const fullText = `${item.Title} ${item.Product} ${item.Issue} ${item['What you should do']} ${item.NID}`.toLowerCase();
-    return normalizedCodes.some((code) => fullText.includes(code.toLowerCase()));
+    const title = (item.Title || '').toLowerCase();
+    const product = (item.Product || '').toLowerCase();
+    const issue = (item.Issue || '').toLowerCase();
+    const whatToDo = (item['What you should do'] || '').toLowerCase();
+    const nid = (item.NID || '').toLowerCase();
+    const fullText = `${title} ${product} ${issue} ${whatToDo} ${nid}`;
+    const fullDigits = fullText.replace(/[^0-9]/g, '');
+
+    return normalizedCodes.some((code) => {
+      const c = code.toLowerCase();
+      if (fullText.includes(c)) return true;
+      if (/^\d+$/.test(c) && c.length >= 7) {
+        if (fullDigits.includes(c)) return true;
+      }
+      return false;
+    });
   });
 
   // Step 2: Query open product registry for product name & brand (Fast & No AI)
