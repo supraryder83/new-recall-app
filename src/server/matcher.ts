@@ -104,6 +104,19 @@ export function evaluateItemMatch(
       recall.normalizedBrand.includes(normBrand) ||
       normBrand.includes(recall.normalizedBrand) ||
       recall.searchIndexText.includes(normBrand);
+
+    // Guard against accessory mentions (e.g. "for Apple Watch")
+    const isOnlyAccessory =
+      recall.searchIndexText.includes('for ' + normBrand) ||
+      recall.searchIndexText.includes('pour ' + normBrand) ||
+      recall.searchIndexText.includes('compatible with ' + normBrand);
+    if (
+      isOnlyAccessory &&
+      !recall.title.toLowerCase().startsWith(normBrand) &&
+      !recall.normalizedBrand.includes(normBrand)
+    ) {
+      brandMatches = false;
+    }
   }
 
   // If user provided a specific brand but it completely fails to match the recall,

@@ -15,6 +15,13 @@ const STOPWORDS = new Set([
   'contain', 'contains', 'foreign', 'pieces', 'particles', 'risk', 'hazard', 'safety'
 ]);
 
+function splitCompoundWords(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+}
+
 /**
  * Normalizes text to lowercase, removes accents/diacritics, and strips non-alphanumeric chars
  */
@@ -27,10 +34,10 @@ export function cleanAlphanumeric(str: string): string {
 }
 
 /**
- * Normalizes text with space preservation
+ * Normalizes text with space preservation and compound word splitting
  */
 export function normalizeCleanText(str: string): string {
-  return (str || '')
+  return splitCompoundWords(str || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')

@@ -413,11 +413,15 @@ var STOPWORDS = /* @__PURE__ */ new Set([
   "hazard",
   "safety"
 ]);
+function splitCompoundWords(str) {
+  if (!str) return "";
+  return str.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+}
 function cleanAlphanumeric(str) {
   return (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
 }
 function normalizeCleanText(str) {
-  return (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/['"’`]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  return splitCompoundWords(str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/['"’`]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 function extractDistinctiveTokens(text) {
   const norm = normalizeCleanText(text);
@@ -774,6 +778,10 @@ function evaluateItemMatch(watchItem, recall, options = {}) {
   let brandMatches = false;
   if (normBrand.length >= 2) {
     brandMatches = recall.normalizedBrand.includes(normBrand) || normBrand.includes(recall.normalizedBrand) || recall.searchIndexText.includes(normBrand);
+    const isOnlyAccessory = recall.searchIndexText.includes("for " + normBrand) || recall.searchIndexText.includes("pour " + normBrand) || recall.searchIndexText.includes("compatible with " + normBrand);
+    if (isOnlyAccessory && !recall.title.toLowerCase().startsWith(normBrand) && !recall.normalizedBrand.includes(normBrand)) {
+      brandMatches = false;
+    }
   }
   if (normBrand.length >= 3 && !brandMatches) {
     return null;

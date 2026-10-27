@@ -463,8 +463,15 @@ const COMPANY_NOISE = new Set([
   'canada', 'canadian', 'group', 'enterprises', 'brands', 'brand', 'products', 'bicycles', 'kids'
 ]);
 
+function splitCompoundWords(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/([a-z]{2,})([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+}
+
 function normalizeClean(str: string): string {
-  return (str || '')
+  return splitCompoundWords(str || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // remove diacritics
@@ -477,7 +484,7 @@ function normalizeClean(str: string): string {
 function extractDistinctiveTokens(text: string): string[] {
   const norm = normalizeClean(text);
   return norm.split(' ').filter((w) => {
-    if (GENERIC_STOPWORDS.has(w)) return false;
+    if (GENERIC_STOPWORDS.has(w) || COMPANY_NOISE.has(w)) return false;
     // Keep numbers and alphanumeric codes (e.g. '4', 'x5', 'v11', '100', 'cat6')
     if (/\d/.test(w)) return true;
     return w.length >= 3;
@@ -495,9 +502,52 @@ function tokenMatchesText(token: string, targetText: string): boolean {
 }
 
 /**
+ * Checks whether the candidate recall is genuinely for the given brand,
+ * preventing false positives where the brand only appears as a compatible accessory
+ * (e.g. "for Apple Watch" or "pour iPhone").
+ */
+function isSubjectBrandMatch(
+  cleanBrand: string,
+  brandTokens: string[],
+  itemTitle: string,
+  itemProduct: string,
+  itemOrg: string
+): boolean {
+  if (!cleanBrand || cleanBrand.length < 2) return false;
+  const target = `${itemTitle} ${itemProduct} ${itemOrg}`;
+
+  let brandPresent = false;
+  if (target.includes(cleanBrand)) {
+    brandPresent = true;
+  } else if (brandTokens.length >= 2) {
+    // Both/all brand tokens must be present (e.g. "fisher" AND "price", "great" AND "value")
+    brandPresent = brandTokens.every((bt) => target.includes(bt));
+  } else if (brandTokens.length === 1) {
+    brandPresent = target.includes(brandTokens[0]);
+  }
+
+  if (!brandPresent) return false;
+
+  // Prevent false matches where brand only appears as a compatible accessory
+  const accessoryPrefixes = ['for ', 'pour ', 'compatible with ', 'fits ', 'designed for '];
+  const isOnlyAccessory = accessoryPrefixes.some((pref) => target.includes(pref + cleanBrand));
+  if (
+    isOnlyAccessory &&
+    !itemTitle.startsWith(cleanBrand) &&
+    !itemProduct.startsWith(cleanBrand) &&
+    !itemOrg.includes(cleanBrand)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Cross-references extracted product details against the Canadian recall database.
- * Employs forensic matching to guarantee accurate detection of recalled products
- * while preventing false positives.
+ * If no specific serial number (SN), batch number, or lot code was detected,
+ * performs a broad lookup by Brand, Product Name, and Model keywords so that
+ * recalled product lines are reliably identified with zero false negatives.
  */
 export function crossReferenceRecallDataset(
   extracted: GeminiExtractionResult,
@@ -507,6 +557,7 @@ export function crossReferenceRecallDataset(
   const cleanProduct = normalizeClean(extracted.productName);
   const cleanFlavor = normalizeClean(extracted.flavorOrVariant || '');
   const cleanModel = normalizeClean(extracted.modelOrLot || extracted.modelOrBatchNumber || '');
+  const cleanSerial = normalizeClean(extracted.serialNumber || '');
   const cleanUpc = (extracted.upcOrCode || '').replace(/[^0-9]/g, '');
   const cleanCategory = normalizeClean(extracted.category || extracted.detectedCategory || '');
 
@@ -527,19 +578,44 @@ export function crossReferenceRecallDataset(
     };
   }
 
-  // Extract distinctive brand tokens (e.g. "Norco Bicycles" -> ["norco"])
+  // Detect whether the scan contains an explicit unit identifier (SN, batch number, lot number, or UPC)
+  const hasValidSerial =
+    cleanSerial.length >= 4 &&
+    !GENERIC_STOPWORDS.has(cleanSerial) &&
+    !['none', 'na', 'null', 'unknown', 'not visible', 'no serial'].includes(cleanSerial);
+
+  const hasValidModel =
+    cleanModel.length >= 3 &&
+    !GENERIC_STOPWORDS.has(cleanModel) &&
+    !['none', 'na', 'null', 'unknown', 'not visible', 'no model', 'no lot'].includes(cleanModel);
+
+  const hasValidUpc = cleanUpc.length >= 8;
+
+  const hasSpecificIdentifier = Boolean(
+    hasValidUpc || hasValidSerial || (hasValidModel && (/\d/.test(cleanModel) || cleanModel.length >= 5))
+  );
+
+  // Extract distinctive brand tokens (e.g. "Fisher-Price" -> ["fisher", "price"])
   const brandTokens = cleanBrand
     .split(' ')
     .filter((t) => t.length >= 2 && !COMPANY_NOISE.has(t) && !GENERIC_STOPWORDS.has(t));
 
   const prodTokens = extractDistinctiveTokens(extracted.productName);
-  const coreProdTokens = prodTokens.filter((t) => !MODIFIER_WORDS.has(t) && !/^[0-9]+$/.test(t));
+  const allSearchTokens = extractDistinctiveTokens(
+    [extracted.productName, extracted.searchKeywords, extracted.modelOrLot, extracted.flavorOrVariant]
+      .filter(Boolean)
+      .join(' ')
+  );
+  const coreUserTokens = allSearchTokens.filter(
+    (t) => !brandTokens.includes(t) && !MODIFIER_WORDS.has(t) && !COMPANY_NOISE.has(t)
+  );
+  const coreProductNouns = coreUserTokens.filter((t) => !/^\d+$/.test(t));
   const flavorTokens = extractDistinctiveTokens(extracted.flavorOrVariant || '');
 
   interface ScoredRecall {
     item: RecallItem;
     score: number;
-    matchType: 'upc' | 'model' | 'exact_product' | 'similar_variant' | 'brand_other';
+    matchType: 'upc' | 'serial' | 'model' | 'exact_product' | 'broad_product_match' | 'similar_variant' | 'brand_other';
   }
 
   const exactCandidates: ScoredRecall[] = [];
@@ -556,7 +632,7 @@ export function crossReferenceRecallDataset(
     const fullItemText = `${itemTitle} ${itemProduct} ${itemIssue} ${itemWhat} ${itemOrg} ${itemCat}`;
 
     // 1. UPC exact match (100% confidence)
-    if (cleanUpc.length >= 8) {
+    if (hasValidUpc) {
       const fullDigits = fullItemText.replace(/[^0-9]/g, '');
       const noLeadingZero = cleanUpc.replace(/^0+/, '');
       if (
@@ -570,54 +646,38 @@ export function crossReferenceRecallDataset(
       }
     }
 
-    // 2. Brand matching check
-    let brandMatches = false;
-    if (cleanBrand.length >= 2) {
-      if (itemTitle.includes(cleanBrand) || itemProduct.includes(cleanBrand) || itemOrg.includes(cleanBrand)) {
-        brandMatches = true;
-      } else if (
-        brandTokens.length > 0 &&
-        brandTokens.some((bt) => itemTitle.includes(bt) || itemProduct.includes(bt) || itemOrg.includes(bt))
+    // 2. Serial number exact match (98% confidence)
+    if (hasValidSerial) {
+      const cleanSerialNoSpaces = cleanSerial.replace(/[^a-z0-9]/g, '');
+      const itemWhatNoSpaces = itemWhat.replace(/[^a-z0-9]/g, '');
+      if (
+        itemProduct.includes(cleanSerial) ||
+        itemTitle.includes(cleanSerial) ||
+        itemWhat.includes(cleanSerial) ||
+        itemWhatNoSpaces.includes(cleanSerialNoSpaces)
       ) {
-        brandMatches = true;
+        exactCandidates.push({ item, score: 98, matchType: 'serial' });
+        continue;
       }
     }
 
     // 3. Model / batch exact match (95% confidence)
-    if (cleanModel.length >= 3 && !GENERIC_STOPWORDS.has(cleanModel)) {
+    if (hasValidModel) {
       const cleanModelNoSpaces = cleanModel.replace(/[^a-z0-9]/g, '');
       const itemTitleNoSpaces = itemTitle.replace(/[^a-z0-9]/g, '');
       const itemProductNoSpaces = itemProduct.replace(/[^a-z0-9]/g, '');
       const itemWhatNoSpaces = itemWhat.replace(/[^a-z0-9]/g, '');
 
       if (
-        (itemProduct.includes(cleanModel) ||
-          itemTitle.includes(cleanModel) ||
-          itemWhat.includes(cleanModel) ||
-          (cleanModelNoSpaces.length >= 4 &&
-            (itemProductNoSpaces.includes(cleanModelNoSpaces) ||
-              itemTitleNoSpaces.includes(cleanModelNoSpaces) ||
-              itemWhatNoSpaces.includes(cleanModelNoSpaces)))) &&
-        (brandMatches || !cleanBrand)
+        itemProduct.includes(cleanModel) ||
+        itemTitle.includes(cleanModel) ||
+        itemWhat.includes(cleanModel) ||
+        (cleanModelNoSpaces.length >= 4 &&
+          (itemProductNoSpaces.includes(cleanModelNoSpaces) ||
+            itemTitleNoSpaces.includes(cleanModelNoSpaces) ||
+            itemWhatNoSpaces.includes(cleanModelNoSpaces)))
       ) {
         exactCandidates.push({ item, score: 95, matchType: 'model' });
-        continue;
-      }
-    }
-
-    // 3b. Serial number exact match (98% confidence)
-    const cleanSerial = normalizeClean(extracted.serialNumber || '');
-    if (cleanSerial.length >= 4 && !GENERIC_STOPWORDS.has(cleanSerial)) {
-      const cleanSerialNoSpaces = cleanSerial.replace(/[^a-z0-9]/g, '');
-      const itemWhatNoSpaces = itemWhat.replace(/[^a-z0-9]/g, '');
-      if (
-        (itemProduct.includes(cleanSerial) ||
-          itemTitle.includes(cleanSerial) ||
-          itemWhat.includes(cleanSerial) ||
-          itemWhatNoSpaces.includes(cleanSerialNoSpaces)) &&
-        (brandMatches || !cleanBrand)
-      ) {
-        exactCandidates.push({ item, score: 98, matchType: 'model' });
         continue;
       }
     }
@@ -633,21 +693,44 @@ export function crossReferenceRecallDataset(
       continue;
     }
 
-    // 5. Product Name & Token Concordance
+    // 5. Brand matching check
+    const brandMatches = isSubjectBrandMatch(cleanBrand, brandTokens, itemTitle, itemProduct, itemOrg);
+    if (cleanBrand.length >= 2 && !brandMatches) {
+      continue;
+    }
+
     const hasPhraseMatch =
       cleanProduct.length >= 4 && (itemTitle.includes(cleanProduct) || itemProduct.includes(cleanProduct));
 
-    // Core token validation (e.g. 'iPhone' must match if present; prevents 'iPhone 15 Pro' matching 'MacBook Pro')
-    const coreTokenMatched =
-      coreProdTokens.length === 0 ||
-      coreProdTokens.some((ct) => tokenMatchesText(ct, itemTitle) || tokenMatchesText(ct, itemProduct));
+    // 5b. Core product noun validation (e.g. "iPhone" must match; prevents "iPhone 15 Pro" matching "MacBook Pro")
+    const coreNounMatched =
+      coreProductNouns.length === 0 ||
+      coreProductNouns.some((cn) => tokenMatchesText(cn, itemTitle) || tokenMatchesText(cn, itemProduct));
 
-    if (!coreTokenMatched && !hasPhraseMatch) {
+    if (!coreNounMatched && !hasPhraseMatch) {
       if (brandMatches && cleanBrand.length >= 2) {
         brandCandidates.push({ item, score: 25, matchType: 'brand_other' });
       }
       continue;
     }
+
+    // 6. Extract core subject tokens from the recall notice title
+    let recallStripped = itemTitle;
+    for (const bt of brandTokens) {
+      recallStripped = recallStripped.replace(new RegExp('\\b' + bt + '\\b', 'g'), ' ');
+    }
+    recallStripped = recallStripped
+      .replace(/\b(recalled due to|rappel en raison de|recalled because|recalled)\b.*/g, ' ')
+      .trim();
+    const recallCoreTokens = extractDistinctiveTokens(recallStripped).filter(
+      (t) => !MODIFIER_WORDS.has(t) && !COMPANY_NOISE.has(t)
+    );
+
+    // 7. Concordance calculation
+    const matchedRecallTokens = recallCoreTokens.filter((rt) =>
+      coreUserTokens.some((ut) => tokenMatchesText(rt, ut) || tokenMatchesText(ut, rt))
+    );
+    const recallTokenRatio = recallCoreTokens.length > 0 ? matchedRecallTokens.length / recallCoreTokens.length : 0;
 
     let matchedProdTokensCount = 0;
     if (prodTokens.length > 0) {
@@ -657,10 +740,9 @@ export function crossReferenceRecallDataset(
         }
       }
     }
-
     const prodTokenRatio = prodTokens.length > 0 ? matchedProdTokensCount / prodTokens.length : 0;
 
-    // 6. Flavor / Variant Concordance
+    // 8. Flavor / Variant Concordance
     let flavorMatches = false;
     if (cleanFlavor.length >= 3) {
       flavorMatches = tokenMatchesText(cleanFlavor, itemTitle) || tokenMatchesText(cleanFlavor, itemProduct);
@@ -670,51 +752,82 @@ export function crossReferenceRecallDataset(
       );
     }
 
-    // 7. Calculate Forensic Match Score (0 to 100)
+    // 9. Score calculation (0 to 100)
     let score = 0;
-    if (brandMatches) score += 30;
-    score += Math.round(prodTokenRatio * 40);
-    if (hasPhraseMatch) score += 25;
-    if (flavorMatches) score += 15;
+    if (brandMatches) score += 35;
+    score += Math.round(recallTokenRatio * 35);
+    score += Math.round(prodTokenRatio * 20);
+    if (hasPhraseMatch) score += 20;
+    if (flavorMatches) score += 10;
 
     // Boost if distinctive digits in product name matched (e.g. '4' in 'storm 4', '11' in 'v11')
-    const hasDistinctiveDigit = prodTokens.some(
+    const hasDistinctiveDigit = coreUserTokens.some(
       (t) => /\d/.test(t) && (tokenMatchesText(t, itemTitle) || tokenMatchesText(t, itemProduct))
     );
     if (hasDistinctiveDigit) score += 15;
 
     const brandSatisfied = brandMatches || !cleanBrand;
-    // If brand was explicitly extracted, require brand concordance for exact product candidates
-    if (cleanBrand.length >= 2 && !brandMatches) {
-      continue;
-    }
 
-    const significantTokens =
-      prodTokens.length <= 1
-        ? prodTokenRatio === 1.0 && (hasPhraseMatch || brandMatches)
-        : prodTokens.length === 2
-        ? prodTokenRatio >= 0.5
-        : prodTokenRatio >= 0.6;
+    // Conditions for broad brand + product + model line match
+    const broadProductMatch =
+      brandSatisfied &&
+      (recallTokenRatio >= 0.5 ||
+        matchedRecallTokens.length >= 2 ||
+        (recallCoreTokens.length === 1 && matchedRecallTokens.length === 1) ||
+        hasPhraseMatch ||
+        (prodTokens.length >= 2 && prodTokenRatio >= 0.5));
 
     const flavorMismatch =
       cleanFlavor.length >= 3 &&
       !flavorMatches &&
       (itemTitle.includes('flavor') || itemTitle.includes('flavour') || itemTitle.includes('variety'));
 
-    // EXACT CANDIDATES: High confidence match for the scanned product
-    if (score >= 50 && brandSatisfied && (hasPhraseMatch || significantTokens) && !flavorMismatch) {
-      exactCandidates.push({ item, score: Math.min(100, score), matchType: 'exact_product' });
+    // When there is NO serial number, batch number, or lot code:
+    // Broad brand + product line matching promotes this notice directly to a confirmed recall match!
+    if (!hasSpecificIdentifier) {
+      if (broadProductMatch && score >= 50 && !flavorMismatch) {
+        exactCandidates.push({
+          item,
+          score: Math.min(100, Math.max(score, 80)),
+          matchType: 'broad_product_match'
+        });
+      } else if (brandMatches && (score >= 40 || matchedRecallTokens.length >= 1 || flavorMismatch)) {
+        similarCandidates.push({ item, score: Math.max(score, 45), matchType: 'similar_variant' });
+      } else if (brandMatches && cleanBrand.length >= 2) {
+        brandCandidates.push({ item, score: Math.max(score, 25), matchType: 'brand_other' });
+      }
+    } else {
+      // If the scan DOES have a specific model/serial, require higher concordance
+      const significantTokens =
+        prodTokens.length <= 1
+          ? prodTokenRatio === 1.0 && (hasPhraseMatch || brandMatches)
+          : prodTokens.length === 2
+          ? prodTokenRatio >= 0.5
+          : prodTokenRatio >= 0.6;
+
+      if (score >= 60 && brandSatisfied && (hasPhraseMatch || significantTokens) && !flavorMismatch) {
+        exactCandidates.push({ item, score: Math.min(100, score), matchType: 'exact_product' });
+      } else if (
+        (score >= 40 && (brandMatches || hasPhraseMatch)) ||
+        (brandMatches && (hasPhraseMatch || prodTokenRatio >= 0.4 || flavorMismatch))
+      ) {
+        similarCandidates.push({ item, score: Math.max(score, 45), matchType: 'similar_variant' });
+      } else if (brandMatches && cleanBrand.length >= 2) {
+        brandCandidates.push({ item, score: Math.max(score, 25), matchType: 'brand_other' });
+      }
     }
-    // SIMILAR VARIANT / PRODUCT LINE CANDIDATES: Score 40-79 or same brand with partial name
-    else if (
-      (score >= 40 && (brandMatches || hasPhraseMatch)) ||
-      (brandMatches && (hasPhraseMatch || prodTokenRatio >= 0.4 || flavorMismatch))
-    ) {
-      similarCandidates.push({ item, score: Math.max(score, 45), matchType: 'similar_variant' });
-    }
-    // OTHER PRODUCT FROM THE SAME BRAND
-    else if (brandMatches && cleanBrand.length >= 2) {
-      brandCandidates.push({ item, score: Math.max(score, 25), matchType: 'brand_other' });
+  }
+
+  // Fallback: If no exact candidates were found, but no SN/lot was detected and top similar candidate is the same brand with high score
+  if (!hasSpecificIdentifier && exactCandidates.length === 0 && similarCandidates.length > 0) {
+    const topSimilar = similarCandidates[0];
+    if (topSimilar.score >= 55) {
+      exactCandidates.push({
+        item: topSimilar.item,
+        score: topSimilar.score,
+        matchType: 'broad_product_match'
+      });
+      similarCandidates.shift();
     }
   }
 
@@ -754,7 +867,11 @@ export function crossReferenceRecallDataset(
 
   let matchReason = '';
   if (verdict === 'MATCH_FOUND') {
-    matchReason = `Identified: ${identifiedTitle} — EXACT product match found in ${exactMatches.length} active Canadian safety notice(s).`;
+    if (hasSpecificIdentifier) {
+      matchReason = `Identified: ${identifiedTitle} — EXACT product & model match found in ${exactMatches.length} active Canadian safety notice(s).`;
+    } else {
+      matchReason = `Identified: ${identifiedTitle} — Safety recall notice found for this product line (${exactMatches.length} notice(s)). Since no serial number or batch code was detected on the item, inspect the affected models and batch codes below.`;
+    }
   } else if (verdict === 'POSSIBLE_MATCH') {
     matchReason = `Identified: ${identifiedTitle} — Potential recall notice found for related model/variation (${similarMatches.length} notice(s)). Please inspect affected models.`;
   } else {

@@ -1253,7 +1253,11 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
                 <div>
                   <h4 className="font-extrabold text-base sm:text-lg">
                     {scanResult.verdict === 'MATCH_FOUND'
-                      ? 'Exact Product Safety Recall Confirmed!'
+                      ? (scanResult.extractedInfo?.serialNumber ||
+                         (scanResult.extractedInfo?.modelOrLot && /\d/.test(scanResult.extractedInfo.modelOrLot)) ||
+                         scanResult.extractedInfo?.upcOrCode
+                          ? 'Exact Product Safety Recall Confirmed!'
+                          : 'Product Line Safety Recall Alert!')
                       : scanResult.verdict === 'POSSIBLE_MATCH'
                       ? 'Potential Recall Found for Related Model!'
                       : 'No Active Recall For This Product'}
@@ -1261,6 +1265,17 @@ Verified via Canada Recall Alert (Health Canada, CFIA, Transport Canada)`;
                   <p className="text-xs sm:text-sm mt-1 opacity-90 leading-relaxed">
                     {scanResult.matchReason}
                   </p>
+                  {scanResult.verdict === 'MATCH_FOUND' &&
+                    !scanResult.extractedInfo?.serialNumber &&
+                    !(scanResult.extractedInfo?.modelOrLot && /\d/.test(scanResult.extractedInfo.modelOrLot)) &&
+                    !scanResult.extractedInfo?.upcOrCode && (
+                      <div className="mt-2.5 px-3 py-1.5 bg-red-600/10 border border-red-300 rounded-xl text-xs text-red-900 font-medium flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                        <span>
+                          <strong>Action required:</strong> Compare your unit’s label or receipt against the affected models & date codes in the notices below.
+                        </span>
+                      </div>
+                    )}
                 </div>
               </div>
 
