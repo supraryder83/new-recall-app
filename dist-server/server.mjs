@@ -40,7 +40,7 @@ import path2 from "node:path";
 var DATA_DIR = path2.resolve(process.cwd(), "data");
 var STORE_FILE = path2.join(DATA_DIR, "pipeline-store.json");
 var INITIAL_WORKER_STATE = {
-  cronExpression: "0 */6 * * *",
+  cronExpression: "0 * * * *",
   isRunning: false,
   lastRunAt: null,
   nextRunAt: null,
@@ -284,7 +284,7 @@ var PipelineStore = class {
       ...this.data.workerState,
       isRunning: false,
       lastRunAt: summary.finishedAt,
-      nextRunAt: summary.finishedAt + 6 * 60 * 60 * 1e3,
+      nextRunAt: summary.finishedAt + 1 * 60 * 60 * 1e3,
       totalRuns: this.data.workerState.totalRuns + 1,
       lastSummary: summary
     };
@@ -587,7 +587,7 @@ import { fileURLToPath as fileURLToPath2 } from "node:url";
 var __filename2 = fileURLToPath2(import.meta.url);
 var __dirname2 = path3.dirname(__filename2);
 var HEALTH_CANADA_FEED_URL = "https://recalls-rappels.canada.ca/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json";
-var SIX_HOURS_MS = 6 * 60 * 60 * 1e3;
+var ONE_HOUR_MS = 1 * 60 * 60 * 1e3;
 var DATA_DIR2 = path3.resolve(process.cwd(), "data");
 var RECALLS_CACHE_FILE = path3.join(DATA_DIR2, "recalls-cache.json");
 function getBundledFallbackPath() {
@@ -614,9 +614,9 @@ function initFromDisk() {
         cachedRecallsBuffer = buf;
         lastCacheFetchTime = stat.mtimeMs;
         const ageMinutes = Math.round((Date.now() - lastCacheFetchTime) / (60 * 1e3));
-        const isFresh = Date.now() - lastCacheFetchTime < SIX_HOURS_MS;
+        const isFresh = Date.now() - lastCacheFetchTime < ONE_HOUR_MS;
         console.log(
-          `[RecallsCache] Initialized with disk cache (${(buf.length / 1024 / 1024).toFixed(1)} MB, updated ${ageMinutes}m ago). ` + (isFresh ? `Cache is fresh for next ${Math.round((SIX_HOURS_MS - (Date.now() - lastCacheFetchTime)) / 6e4)}m.` : "Cache is older than 6h, background refresh scheduled.")
+          `[RecallsCache] Initialized with disk cache (${(buf.length / 1024 / 1024).toFixed(1)} MB, updated ${ageMinutes}m ago). ` + (isFresh ? `Cache is fresh for next ${Math.round((ONE_HOUR_MS - (Date.now() - lastCacheFetchTime)) / 6e4)}m.` : "Cache is older than 1h, background refresh scheduled.")
         );
         if (!isFresh) {
           refreshRecallsFeed(true).catch(() => {
@@ -632,7 +632,7 @@ function initFromDisk() {
         cachedRecallsBuffer = buf;
         lastCacheFetchTime = 0;
         console.log(
-          `[RecallsCache] Initialized with local bundled fallback (${(buf.length / 1024 / 1024).toFixed(1)} MB). Fetching live 6-hour cache...`
+          `[RecallsCache] Initialized with local bundled fallback (${(buf.length / 1024 / 1024).toFixed(1)} MB). Fetching live 1-hour cache...`
         );
         refreshRecallsFeed(true).catch(() => {
         });
@@ -647,7 +647,7 @@ function initFromDisk() {
 }
 initFromDisk();
 async function refreshRecallsFeed(force = false) {
-  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < SIX_HOURS_MS;
+  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < ONE_HOUR_MS;
   if (!force && isFresh) {
     return cachedRecallsBuffer;
   }
@@ -656,7 +656,7 @@ async function refreshRecallsFeed(force = false) {
   }
   activeFetchPromise = (async () => {
     try {
-      console.log("[RecallsCache] Fetching fresh Health Canada open data feed (6-hour update window)...");
+      console.log("[RecallsCache] Fetching fresh Health Canada open data feed (1-hour update window)...");
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3e4);
       const upstream = await fetch(HEALTH_CANADA_FEED_URL, {
@@ -682,8 +682,8 @@ async function refreshRecallsFeed(force = false) {
             console.warn("[RecallsCache] Could not persist cache to disk:", writeErr.message);
           }
           console.log(
-            `[RecallsCache] Successfully cached Health Canada recalls feed (${(buf.length / 1024 / 1024).toFixed(1)} MB). Locked for 6 hours until ${new Date(
-              lastCacheFetchTime + SIX_HOURS_MS
+            `[RecallsCache] Successfully cached Health Canada recalls feed (${(buf.length / 1024 / 1024).toFixed(1)} MB). Locked for 1 hour until ${new Date(
+              lastCacheFetchTime + ONE_HOUR_MS
             ).toISOString()}.`
           );
           return buf;
@@ -701,7 +701,7 @@ async function refreshRecallsFeed(force = false) {
   return activeFetchPromise;
 }
 async function getOrFetchRecallsBuffer(force = false) {
-  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < SIX_HOURS_MS;
+  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < ONE_HOUR_MS;
   if (!force && isFresh && cachedRecallsBuffer) {
     return {
       buffer: cachedRecallsBuffer,
@@ -719,15 +719,15 @@ async function getOrFetchRecallsBuffer(force = false) {
 function getRecallsCacheStatus() {
   const now = Date.now();
   const ageMs = lastCacheFetchTime ? now - lastCacheFetchTime : null;
-  const isFresh = Boolean(cachedRecallsBuffer && ageMs !== null && ageMs < SIX_HOURS_MS);
+  const isFresh = Boolean(cachedRecallsBuffer && ageMs !== null && ageMs < ONE_HOUR_MS);
   return {
     isCached: Boolean(cachedRecallsBuffer),
-    cacheTtlHours: 6,
-    cacheTtlMs: SIX_HOURS_MS,
+    cacheTtlHours: 1,
+    cacheTtlMs: ONE_HOUR_MS,
     lastUpdated: lastCacheFetchTime,
     lastUpdatedIso: lastCacheFetchTime ? new Date(lastCacheFetchTime).toISOString() : null,
-    nextUpdateAt: lastCacheFetchTime ? lastCacheFetchTime + SIX_HOURS_MS : null,
-    nextUpdateIso: lastCacheFetchTime ? new Date(lastCacheFetchTime + SIX_HOURS_MS).toISOString() : null,
+    nextUpdateAt: lastCacheFetchTime ? lastCacheFetchTime + ONE_HOUR_MS : null,
+    nextUpdateIso: lastCacheFetchTime ? new Date(lastCacheFetchTime + ONE_HOUR_MS).toISOString() : null,
     ageSeconds: ageMs !== null ? Math.floor(ageMs / 1e3) : null,
     ageMinutes: ageMs !== null ? Math.floor(ageMs / (1e3 * 60)) : null,
     sizeBytes: cachedRecallsBuffer?.length || 0,
@@ -764,7 +764,7 @@ async function handleRecallsApiRequest(req, res) {
     res.writeHead(304, {
       "Access-Control-Allow-Origin": "*",
       "ETag": etag,
-      "Cache-Control": "public, max-age=21600, stale-while-revalidate=3600"
+      "Cache-Control": "public, max-age=3600, stale-while-revalidate=600"
     });
     res.end();
     return;
@@ -784,13 +784,13 @@ async function handleRecallsApiRequest(req, res) {
     return;
   }
   const ageSeconds = lastUpdated ? Math.floor((Date.now() - lastUpdated) / 1e3) : 0;
-  const nextUpdateSeconds = Math.max(0, Math.floor((SIX_HOURS_MS - (Date.now() - lastUpdated)) / 1e3));
+  const nextUpdateSeconds = Math.max(0, Math.floor((ONE_HOUR_MS - (Date.now() - lastUpdated)) / 1e3));
   const currentEtag = lastUpdated ? `"recalls-${lastUpdated}"` : '"recalls-initial"';
   res.writeHead(200, {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "public, max-age=21600, stale-while-revalidate=3600",
-    // 6 hours
+    "Cache-Control": "public, max-age=3600, stale-while-revalidate=600",
+    // 1 hour
     "ETag": currentEtag,
     "Last-Modified": lastUpdated ? new Date(lastUpdated).toUTCString() : (/* @__PURE__ */ new Date()).toUTCString(),
     "X-Server-Cache": fromCache ? "HIT" : "MISS",
@@ -821,7 +821,7 @@ async function fetchWithExponentialBackoff(url, options = {}) {
         signal: controller.signal,
         headers: {
           Accept: "application/json, text/plain, */*",
-          "User-Agent": "Canada-Recall-6Hour-Sync-Worker/1.0 (+https://recalls-rappels.canada.ca)"
+          "User-Agent": "Canada-Recall-1Hour-Sync-Worker/1.0 (+https://recalls-rappels.canada.ca)"
         }
       });
       clearTimeout(timer);
@@ -888,7 +888,7 @@ async function queryHealthCanadaFeed(options = {}) {
         }
         if (Array.isArray(json) && json.length > 0) {
           rawData = json;
-          feedSource = fromCache ? "server-cache-6h" : "health-canada-live";
+          feedSource = fromCache ? "server-cache-1h" : "health-canada-live";
         }
       }
     }
@@ -1282,7 +1282,7 @@ async function runSyncPipeline(options = {}) {
   const startedAt = Date.now();
   const errors = [];
   console.log("=".repeat(70));
-  console.log(`[Pipeline] Starting 6-Hour Background Sync Worker at ${new Date(startedAt).toISOString()}`);
+  console.log(`[Pipeline] Starting 1-Hour Background Sync Worker at ${new Date(startedAt).toISOString()}`);
   console.log("=".repeat(70));
   pipelineStore.updateWorkerState({ isRunning: true });
   let recordsQueried = 0;
@@ -1476,7 +1476,7 @@ async function handlePipelineApiRequest(req, res, next) {
       }
       const payload = JSON.stringify({
         title: "Product Recall Alert: Test Notification",
-        body: "Your 6-hour background sync worker and reverse-lookup alert pipeline is active! Deep link test for Canada.ca recall #82848.",
+        body: "Your 1-hour background sync worker and reverse-lookup alert pipeline is active! Deep link test for Canada.ca recall #82848.",
         icon: "/icons/icon-192x192.png",
         badge: "/icons/icon-192x192.png",
         tag: `recall-test-${Date.now()}`,
@@ -1586,21 +1586,21 @@ import cron from "node-cron";
 var __filename5 = fileURLToPath5(import.meta.url);
 var __dirname5 = path7.dirname(__filename5);
 dotenv4.config({ path: path7.resolve(__dirname5, "../.env") });
-var SIX_HOURS_CRON = "0 */6 * * *";
+var HOURLY_CRON = "0 * * * *";
 var scheduledTask = null;
 function startSyncWorker(options = {}) {
   initVapid();
-  console.log(`[SyncWorker] Initializing 6-hour background sync worker (cron: '${SIX_HOURS_CRON}')...`);
+  console.log(`[SyncWorker] Initializing 1-hour background sync worker (cron: '${HOURLY_CRON}')...`);
   const state = pipelineStore.getWorkerState();
-  const nextRun = Date.now() + 6 * 60 * 60 * 1e3;
+  const nextRun = Date.now() + 1 * 60 * 60 * 1e3;
   pipelineStore.updateWorkerState({
-    cronExpression: SIX_HOURS_CRON,
+    cronExpression: HOURLY_CRON,
     nextRunAt: nextRun
   });
   if (options.runOnStartupIfDue !== false) {
     const lastRun = state.lastRunAt;
-    const sixHoursMs = 6 * 60 * 60 * 1e3;
-    if (!lastRun || Date.now() - lastRun >= sixHoursMs) {
+    const oneHourMs = 1 * 60 * 60 * 1e3;
+    if (!lastRun || Date.now() - lastRun >= oneHourMs) {
       console.log(`[SyncWorker] Initial sync is due (last run: ${lastRun ? new Date(lastRun).toISOString() : "Never"}). Triggering initial sync run...`);
       runSyncPipeline().catch((err) => {
         console.error("[SyncWorker] Error during initial startup sync:", err);
@@ -1608,13 +1608,13 @@ function startSyncWorker(options = {}) {
     }
   }
   scheduledTask = cron.schedule(
-    SIX_HOURS_CRON,
+    HOURLY_CRON,
     async () => {
-      console.log(`[SyncWorker] Cron trigger activated ('${SIX_HOURS_CRON}'). Executing scheduled 6-hour sync...`);
+      console.log(`[SyncWorker] Cron trigger activated ('${HOURLY_CRON}'). Executing scheduled 1-hour sync...`);
       try {
         await runSyncPipeline();
       } catch (err) {
-        console.error("[SyncWorker] Scheduled 6-hour sync failed:", err);
+        console.error("[SyncWorker] Scheduled 1-hour sync failed:", err);
       }
     },
     {
@@ -1622,13 +1622,13 @@ function startSyncWorker(options = {}) {
       // Standard Canadian Health Canada time zone
     }
   );
-  console.log(`[SyncWorker] Background sync scheduled. Next estimated execution in ~6 hours.`);
+  console.log(`[SyncWorker] Background sync scheduled. Next estimated execution in ~1 hour.`);
   return {
     stop: () => {
       if (scheduledTask) {
         scheduledTask.stop();
         scheduledTask = null;
-        console.log("[SyncWorker] 6-hour sync worker stopped.");
+        console.log("[SyncWorker] 1-hour sync worker stopped.");
       }
     },
     task: scheduledTask
@@ -1642,7 +1642,7 @@ if (isMain) {
   const windowArg = args.find((a) => a.startsWith("--window-hours="));
   const customWindowHours = windowArg ? parseInt(windowArg.split("=")[1], 10) : void 0;
   console.log("=".repeat(70));
-  console.log("\u{1F1E8}\u{1F1E6} Health Canada 6-Hour Background Sync & Web Push Notification Worker");
+  console.log("\u{1F1E8}\u{1F1E6} Health Canada 1-Hour Background Sync & Web Push Notification Worker");
   console.log("=".repeat(70));
   if (isRunOnce) {
     console.log("[CLI] Running single sync cycle and exiting (--run-once)...");
@@ -1657,7 +1657,7 @@ if (isMain) {
       process.exit(1);
     });
   } else {
-    console.log("[CLI] Starting daemon in background mode with cron: 0 */6 * * *");
+    console.log("[CLI] Starting daemon in background mode with cron: 0 * * * *");
     const worker = startSyncWorker({ runOnStartupIfDue: true });
     const shutdown = () => {
       console.log("\n[CLI] Received termination signal. Shutting down worker...");

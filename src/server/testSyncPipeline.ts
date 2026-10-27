@@ -9,14 +9,14 @@ import { fetchWithExponentialBackoff } from './fetchFeed';
 import { SIX_HOURS_CRON } from './worker';
 
 async function runTests() {
-  console.log('🧪 Starting Canadian Health Recall 6-Hour Background Sync & Pipeline Tests...\n');
+  console.log('🧪 Starting Canadian Health Recall 1-Hour Background Sync & Pipeline Tests...\n');
 
   // =========================================================================
   // TEST 1: Cron schedule configuration
   // =========================================================================
-  console.log('Test 1: Cron schedule configuration (0 */6 * * *)');
-  assert.strictEqual(SIX_HOURS_CRON, '0 */6 * * *', 'Cron expression must be 0 */6 * * *');
-  console.log('  ✅ Scheduled cron expression verified: 0 */6 * * *\n');
+  console.log('Test 1: Cron schedule configuration (0 * * * *)');
+  assert.strictEqual(SIX_HOURS_CRON, '0 * * * *', 'Cron expression must be 0 * * * * (1 hour)');
+  console.log('  ✅ Scheduled cron expression verified: 0 * * * *\n');
 
   // =========================================================================
   // TEST 2: Ingestion & Normalization

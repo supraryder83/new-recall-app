@@ -9,8 +9,9 @@ const __dirname = path.dirname(__filename);
 export const HEALTH_CANADA_FEED_URL =
   'https://recalls-rappels.canada.ca/sites/default/files/opendata-donneesouvertes/HCRSAMOpenData.json';
 
-// Exact 6-hour cache TTL
-export const SIX_HOURS_MS = 6 * 60 * 60 * 1000; // 21,600,000 ms
+// Exact 1-hour cache TTL
+export const ONE_HOUR_MS = 1 * 60 * 60 * 1000; // 3,600,000 ms
+export const SIX_HOURS_MS = ONE_HOUR_MS; // Alias for backward compatibility
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const RECALLS_CACHE_FILE = path.join(DATA_DIR, 'recalls-cache.json');
@@ -46,16 +47,16 @@ function initFromDisk(): void {
         cachedRecallsBuffer = buf;
         lastCacheFetchTime = stat.mtimeMs;
         const ageMinutes = Math.round((Date.now() - lastCacheFetchTime) / (60 * 1000));
-        const isFresh = Date.now() - lastCacheFetchTime < SIX_HOURS_MS;
+        const isFresh = Date.now() - lastCacheFetchTime < ONE_HOUR_MS;
         console.log(
           `[RecallsCache] Initialized with disk cache (${(buf.length / 1024 / 1024).toFixed(1)} MB, updated ${ageMinutes}m ago). ` +
             (isFresh
-              ? `Cache is fresh for next ${Math.round((SIX_HOURS_MS - (Date.now() - lastCacheFetchTime)) / 60000)}m.`
-              : 'Cache is older than 6h, background refresh scheduled.')
+              ? `Cache is fresh for next ${Math.round((ONE_HOUR_MS - (Date.now() - lastCacheFetchTime)) / 60000)}m.`
+              : 'Cache is older than 1h, background refresh scheduled.')
         );
 
         if (!isFresh) {
-          // Stale (> 6h): trigger background refresh
+          // Stale (> 1h): trigger background refresh
           refreshRecallsFeed(true).catch(() => {});
         }
         return;
@@ -70,7 +71,7 @@ function initFromDisk(): void {
         cachedRecallsBuffer = buf;
         lastCacheFetchTime = 0; // marked as 0 so it will refresh from Health Canada
         console.log(
-          `[RecallsCache] Initialized with local bundled fallback (${(buf.length / 1024 / 1024).toFixed(1)} MB). Fetching live 6-hour cache...`
+          `[RecallsCache] Initialized with local bundled fallback (${(buf.length / 1024 / 1024).toFixed(1)} MB). Fetching live 1-hour cache...`
         );
         refreshRecallsFeed(true).catch(() => {});
         return;
@@ -92,7 +93,7 @@ initFromDisk();
  * Ensures only ONE network request happens even if multiple callers request refresh simultaneously.
  */
 export async function refreshRecallsFeed(force = false): Promise<Buffer | null> {
-  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < SIX_HOURS_MS;
+  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < ONE_HOUR_MS;
   if (!force && isFresh) {
     return cachedRecallsBuffer;
   }
@@ -103,7 +104,7 @@ export async function refreshRecallsFeed(force = false): Promise<Buffer | null> 
 
   activeFetchPromise = (async () => {
     try {
-      console.log('[RecallsCache] Fetching fresh Health Canada open data feed (6-hour update window)...');
+      console.log('[RecallsCache] Fetching fresh Health Canada open data feed (1-hour update window)...');
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
 
@@ -134,8 +135,8 @@ export async function refreshRecallsFeed(force = false): Promise<Buffer | null> 
           }
 
           console.log(
-            `[RecallsCache] Successfully cached Health Canada recalls feed (${(buf.length / 1024 / 1024).toFixed(1)} MB). Locked for 6 hours until ${new Date(
-              lastCacheFetchTime + SIX_HOURS_MS
+            `[RecallsCache] Successfully cached Health Canada recalls feed (${(buf.length / 1024 / 1024).toFixed(1)} MB). Locked for 1 hour until ${new Date(
+              lastCacheFetchTime + ONE_HOUR_MS
             ).toISOString()}.`
           );
           return buf;
@@ -157,14 +158,14 @@ export async function refreshRecallsFeed(force = false): Promise<Buffer | null> 
 }
 
 /**
- * Returns the cached buffer if fresh (< 6 hours), otherwise refreshes.
+ * Returns the cached buffer if fresh (< 1 hour), otherwise refreshes.
  */
 export async function getOrFetchRecallsBuffer(force = false): Promise<{
   buffer: Buffer | null;
   fromCache: boolean;
   lastUpdated: number;
 }> {
-  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < SIX_HOURS_MS;
+  const isFresh = cachedRecallsBuffer && Date.now() - lastCacheFetchTime < ONE_HOUR_MS;
   if (!force && isFresh && cachedRecallsBuffer) {
     return {
       buffer: cachedRecallsBuffer,
@@ -187,16 +188,16 @@ export async function getOrFetchRecallsBuffer(force = false): Promise<{
 export function getRecallsCacheStatus() {
   const now = Date.now();
   const ageMs = lastCacheFetchTime ? now - lastCacheFetchTime : null;
-  const isFresh = Boolean(cachedRecallsBuffer && ageMs !== null && ageMs < SIX_HOURS_MS);
+  const isFresh = Boolean(cachedRecallsBuffer && ageMs !== null && ageMs < ONE_HOUR_MS);
 
   return {
     isCached: Boolean(cachedRecallsBuffer),
-    cacheTtlHours: 6,
-    cacheTtlMs: SIX_HOURS_MS,
+    cacheTtlHours: 1,
+    cacheTtlMs: ONE_HOUR_MS,
     lastUpdated: lastCacheFetchTime,
     lastUpdatedIso: lastCacheFetchTime ? new Date(lastCacheFetchTime).toISOString() : null,
-    nextUpdateAt: lastCacheFetchTime ? lastCacheFetchTime + SIX_HOURS_MS : null,
-    nextUpdateIso: lastCacheFetchTime ? new Date(lastCacheFetchTime + SIX_HOURS_MS).toISOString() : null,
+    nextUpdateAt: lastCacheFetchTime ? lastCacheFetchTime + ONE_HOUR_MS : null,
+    nextUpdateIso: lastCacheFetchTime ? new Date(lastCacheFetchTime + ONE_HOUR_MS).toISOString() : null,
     ageSeconds: ageMs !== null ? Math.floor(ageMs / 1000) : null,
     ageMinutes: ageMs !== null ? Math.floor(ageMs / (1000 * 60)) : null,
     sizeBytes: cachedRecallsBuffer?.length || 0,
@@ -248,7 +249,7 @@ export async function handleRecallsApiRequest(
     res.writeHead(304, {
       'Access-Control-Allow-Origin': '*',
       'ETag': etag,
-      'Cache-Control': 'public, max-age=21600, stale-while-revalidate=3600'
+      'Cache-Control': 'public, max-age=3600, stale-while-revalidate=600'
     });
     res.end();
     return;
@@ -272,13 +273,13 @@ export async function handleRecallsApiRequest(
   }
 
   const ageSeconds = lastUpdated ? Math.floor((Date.now() - lastUpdated) / 1000) : 0;
-  const nextUpdateSeconds = Math.max(0, Math.floor((SIX_HOURS_MS - (Date.now() - lastUpdated)) / 1000));
+  const nextUpdateSeconds = Math.max(0, Math.floor((ONE_HOUR_MS - (Date.now() - lastUpdated)) / 1000));
   const currentEtag = lastUpdated ? `"recalls-${lastUpdated}"` : '"recalls-initial"';
 
   res.writeHead(200, {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Cache-Control': 'public, max-age=21600, stale-while-revalidate=3600', // 6 hours
+    'Cache-Control': 'public, max-age=3600, stale-while-revalidate=600', // 1 hour
     'ETag': currentEtag,
     'Last-Modified': lastUpdated ? new Date(lastUpdated).toUTCString() : new Date().toUTCString(),
     'X-Server-Cache': fromCache ? 'HIT' : 'MISS',

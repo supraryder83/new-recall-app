@@ -86,7 +86,7 @@ export default defineConfig(({ mode }) => {
               cacheName: 'canada-recalls-api-cache',
               expiration: {
                 maxEntries: 5,
-                maxAgeSeconds: 6 * 60 * 60 // 6 hours
+                maxAgeSeconds: 1 * 60 * 60 // 1 hour
               },
               cacheableResponse: {
                 statuses: [0, 200]

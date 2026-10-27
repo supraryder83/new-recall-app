@@ -295,7 +295,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 break-words [overflow-wrap:anywhere]">
-            Your permanent safety log & 6-hour automatic recall sync on app open
+            Your permanent safety log & 1-hour automatic recall sync on app open
           </p>
         </div>
 
@@ -337,11 +337,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 </h3>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Syncs Every 6h On Open
+                  Syncs Every 1h On Open
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed break-words [overflow-wrap:anywhere]">
-                Every product in your scan history is continuously monitored. On app open, the recall database is synced every 6 hours from Health Canada and checked against your scan history. You receive immediate alerts if any scanned product is recalled.
+                Every product in your scan history is continuously monitored. On app open, the recall database is synced every 1 hour from Health Canada and checked against your scan history. You receive immediate alerts if any scanned product is recalled.
               </p>
             </div>
           </div>
@@ -422,7 +422,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span className="shrink-0">Schedule:</span>
               <strong className="text-slate-200 break-words">
-                Every 6 hours on app open
+                Every 1 hour on app open
               </strong>
             </span>
 
@@ -551,7 +551,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <div className="max-w-md mx-auto space-y-1.5 min-w-0">
             <h3 className="font-extrabold text-lg text-slate-900 break-words">No Product Scans Yet</h3>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed break-words [overflow-wrap:anywhere]">
-              When you photograph an item and its serial / model number tag, the system will identify it, check for active Canadian safety recalls, and save it to your permanent safety log for continuous 6-hour monitoring.
+              When you photograph an item and its serial / model number tag, the system will identify it, check for active Canadian safety recalls, and save it to your permanent safety log for continuous 1-hour monitoring.
             </p>
           </div>
           <button
@@ -663,7 +663,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         </span>
                       </span>
 
-                      {/* 6-Hour Monitor Recall Alert Badge (only if newly recalled and not yet acknowledged) */}
+                      {/* 1-Hour Monitor Recall Alert Badge (only if newly recalled and not yet acknowledged) */}
                       {isNewlyRecalled && !isAcknowledged && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase bg-red-600 text-white animate-pulse shrink-0">
                           <span>🚨 Recalled After Scan</span>

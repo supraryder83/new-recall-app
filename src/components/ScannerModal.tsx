@@ -418,7 +418,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
         searchKeywords: result.searchKeywords
       });
 
-      // Record for 6-hour background monitoring
+      // Record for 1-hour background monitoring
       if (result.matchedRecalls && result.matchedRecalls.length > 0) {
         for (const recall of result.matchedRecalls) {
           recordNotifiedRecall({
@@ -486,7 +486,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
         searchKeywords: result.searchKeywords
       });
 
-      // Record for 6-hour background monitoring
+      // Record for 1-hour background monitoring
       if (result.matchedRecalls && result.matchedRecalls.length > 0) {
         for (const recall of result.matchedRecalls) {
           recordNotifiedRecall({

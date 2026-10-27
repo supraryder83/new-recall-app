@@ -3,7 +3,7 @@ import { recallStorage } from './storage';
 
 export const PRIMARY_FEED_URL = '/api/recalls';
 
-// Server endpoints: clients fetch from this server (cached 6 hours), falling back to local bundled dataset
+// Server endpoints: clients fetch from this server (cached 1 hour), falling back to local bundled dataset
 export const PROXY_ENDPOINTS = [
   '/api/recalls',
   '/data/initial-recalls.json'
@@ -160,7 +160,7 @@ export async function syncLiveRecallsDatabase(
 ): Promise<FetchFeedResult> {
   onProgress?.('Connecting to Canadian recall server cache...');
 
-  // Clients fetch directly from this server's 6-hour cached API endpoint,
+  // Clients fetch directly from this server's 1-hour cached API endpoint,
   // falling back to local bundled data if server is unreachable
   const candidateUrls = ['/api/recalls', '/data/initial-recalls.json'];
 
@@ -168,7 +168,7 @@ export async function syncLiveRecallsDatabase(
     try {
       onProgress?.(
         url === '/api/recalls'
-          ? 'Fetching 6-hour cached recall notices from server...'
+          ? 'Fetching 1-hour cached recall notices from server...'
           : 'Loading local safety registry...'
       );
       const controller = new AbortController();

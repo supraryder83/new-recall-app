@@ -106,7 +106,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Safety monitoring recall alerts (detected in scan history by 6-hour check)
+  // Safety monitoring recall alerts (detected in scan history by 1-hour check)
   const [monitoringAlerts, setMonitoringAlerts] = useState<
     { historyItem: ScanHistoryItem; recall: RecallItem }[]
   >([]);
@@ -171,7 +171,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Load Data & Update Database on App Open (only syncs once every 6 hours)
+  // Load Data & Update Database on App Open (only syncs once every 1 hour)
   const loadData = useCallback(async (forceRefresh = false) => {
     setSyncState((prev) => ({ ...prev, status: 'loading', errorMessage: undefined }));
 
@@ -200,7 +200,7 @@ export const App: React.FC = () => {
           });
         }
 
-        // Only syncs from network if 6 hours have passed since last sync (force = false)
+        // Only syncs from network if 1 hour has passed since last sync (force = false)
         const syncRes = await updateDatabaseAndCheckHistory((step) => setLoadingProgress(step), false);
         if (syncRes.recallsCount > 0) {
           const updated = await recallStorage.getAllRecalls();

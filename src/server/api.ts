@@ -61,7 +61,7 @@ export async function handlePipelineApiRequest(
     return next();
   }
 
-  // 0. GET /api/recalls and /api/recalls/status (6-hour cached Health Canada feed)
+  // 0. GET /api/recalls and /api/recalls/status (1-hour cached Health Canada feed)
   if (url === '/api/recalls' || url.startsWith('/api/recalls?') || url.startsWith('/api/recalls/')) {
     return handleRecallsApiRequest(req, res);
   }
@@ -141,7 +141,7 @@ export async function handlePipelineApiRequest(
 
       const payload = JSON.stringify({
         title: 'Product Recall Alert: Test Notification',
-        body: 'Your 6-hour background sync worker and reverse-lookup alert pipeline is active! Deep link test for Canada.ca recall #82848.',
+        body: 'Your 1-hour background sync worker and reverse-lookup alert pipeline is active! Deep link test for Canada.ca recall #82848.',
         icon: '/icons/icon-192x192.png',
         badge: '/icons/icon-192x192.png',
         tag: `recall-test-${Date.now()}`,

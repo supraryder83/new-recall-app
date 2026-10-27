@@ -11,7 +11,7 @@ import { dispatchBatchNotifications } from './pushService';
 export interface RunPipelineOptions extends FetchOptions, MatchOptions {}
 
 /**
- * Executes one complete run of the 6-Hour Background Sync & Reverse-Lookup Notification Pipeline:
+ * Executes one complete run of the 1-Hour Background Sync & Reverse-Lookup Notification Pipeline:
  * 1. Queries Health Canada feed with retry & exponential backoff
  * 2. Filters 24h window & deduplicates against processed_recalls
  * 3. Normalizes incoming recalls
@@ -28,7 +28,7 @@ export async function runSyncPipeline(
   const errors: string[] = [];
 
   console.log('='.repeat(70));
-  console.log(`[Pipeline] Starting 6-Hour Background Sync Worker at ${new Date(startedAt).toISOString()}`);
+  console.log(`[Pipeline] Starting 1-Hour Background Sync Worker at ${new Date(startedAt).toISOString()}`);
   console.log('='.repeat(70));
 
   pipelineStore.updateWorkerState({ isRunning: true });
@@ -131,7 +131,7 @@ export async function runSyncPipeline(
     status
   };
 
-  // Record summary and update worker state with next scheduled 6h timestamp
+  // Record summary and update worker state with next scheduled 1h timestamp
   pipelineStore.recordRunSummary(summary);
 
   console.log('='.repeat(70));

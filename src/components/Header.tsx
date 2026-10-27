@@ -77,7 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             onClick={onOpenNotifications}
             className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all relative border border-slate-200/70 active:scale-95"
-            title="Recall Notifications & 6-Hour Monitor"
+            title="Recall Notifications & 1-Hour Monitor"
             aria-label="Recall Notifications"
           >
             <BellRing className="w-4 h-4 text-slate-700" />

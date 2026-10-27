@@ -13,13 +13,14 @@ const __dirname = path.dirname(__filename);
 // Explicitly load .env from parent directory (e.g. deploy/.env)
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-export const SIX_HOURS_CRON = '0 */6 * * *';
+export const HOURLY_CRON = '0 * * * *';
+export const SIX_HOURS_CRON = HOURLY_CRON; // Alias for backward compatibility
 
 let scheduledTask: ScheduledTask | null = null;
 
 /**
- * Starts the recurring 6-hour background sync worker.
- * Runs on cron schedule '0 star/6 star star star' (cron: 0 * / 6 * * *).
+ * Starts the recurring 1-hour background sync worker.
+ * Runs on cron schedule '0 * * * *' (cron: hourly at minute 0).
  */
 export function startSyncWorker(options: { runOnStartupIfDue?: boolean } = {}): {
   stop: () => void;
@@ -27,21 +28,21 @@ export function startSyncWorker(options: { runOnStartupIfDue?: boolean } = {}): 
 } {
   initVapid();
 
-  console.log(`[SyncWorker] Initializing 6-hour background sync worker (cron: '${SIX_HOURS_CRON}')...`);
+  console.log(`[SyncWorker] Initializing 1-hour background sync worker (cron: '${HOURLY_CRON}')...`);
 
   // Update initial worker state
   const state = pipelineStore.getWorkerState();
-  const nextRun = Date.now() + 6 * 60 * 60 * 1000;
+  const nextRun = Date.now() + 1 * 60 * 60 * 1000;
   pipelineStore.updateWorkerState({
-    cronExpression: SIX_HOURS_CRON,
+    cronExpression: HOURLY_CRON,
     nextRunAt: nextRun
   });
 
-  // Check if due on startup (if never run or last run was > 6 hours ago)
+  // Check if due on startup (if never run or last run was > 1 hour ago)
   if (options.runOnStartupIfDue !== false) {
     const lastRun = state.lastRunAt;
-    const sixHoursMs = 6 * 60 * 60 * 1000;
-    if (!lastRun || Date.now() - lastRun >= sixHoursMs) {
+    const oneHourMs = 1 * 60 * 60 * 1000;
+    if (!lastRun || Date.now() - lastRun >= oneHourMs) {
       console.log(`[SyncWorker] Initial sync is due (last run: ${lastRun ? new Date(lastRun).toISOString() : 'Never'}). Triggering initial sync run...`);
       runSyncPipeline().catch((err: any) => {
         console.error('[SyncWorker] Error during initial startup sync:', err);
@@ -49,15 +50,15 @@ export function startSyncWorker(options: { runOnStartupIfDue?: boolean } = {}): 
     }
   }
 
-  // Schedule cron: 0 */6 * * *
+  // Schedule cron: 0 * * * *
   scheduledTask = cron.schedule(
-    SIX_HOURS_CRON,
+    HOURLY_CRON,
     async () => {
-      console.log(`[SyncWorker] Cron trigger activated ('${SIX_HOURS_CRON}'). Executing scheduled 6-hour sync...`);
+      console.log(`[SyncWorker] Cron trigger activated ('${HOURLY_CRON}'). Executing scheduled 1-hour sync...`);
       try {
         await runSyncPipeline();
       } catch (err) {
-        console.error('[SyncWorker] Scheduled 6-hour sync failed:', err);
+        console.error('[SyncWorker] Scheduled 1-hour sync failed:', err);
       }
     },
     {
@@ -65,14 +66,14 @@ export function startSyncWorker(options: { runOnStartupIfDue?: boolean } = {}): 
     }
   );
 
-  console.log(`[SyncWorker] Background sync scheduled. Next estimated execution in ~6 hours.`);
+  console.log(`[SyncWorker] Background sync scheduled. Next estimated execution in ~1 hour.`);
 
   return {
     stop: () => {
       if (scheduledTask) {
         scheduledTask.stop();
         scheduledTask = null;
-        console.log('[SyncWorker] 6-hour sync worker stopped.');
+        console.log('[SyncWorker] 1-hour sync worker stopped.');
       }
     },
     task: scheduledTask
@@ -95,7 +96,7 @@ if (isMain) {
   const customWindowHours = windowArg ? parseInt(windowArg.split('=')[1], 10) : undefined;
 
   console.log('='.repeat(70));
-  console.log('🇨🇦 Health Canada 6-Hour Background Sync & Web Push Notification Worker');
+  console.log('🇨🇦 Health Canada 1-Hour Background Sync & Web Push Notification Worker');
   console.log('='.repeat(70));
 
   if (isRunOnce) {
@@ -114,7 +115,7 @@ if (isMain) {
       });
   } else {
     // Daemon mode
-    console.log('[CLI] Starting daemon in background mode with cron: 0 */6 * * *');
+    console.log('[CLI] Starting daemon in background mode with cron: 0 * * * *');
     const worker = startSyncWorker({ runOnStartupIfDue: true });
 
     // Handle graceful shutdown

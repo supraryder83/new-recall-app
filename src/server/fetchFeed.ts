@@ -66,7 +66,7 @@ export async function fetchWithExponentialBackoff(
         signal: controller.signal,
         headers: {
           Accept: 'application/json, text/plain, */*',
-          'User-Agent': 'Canada-Recall-6Hour-Sync-Worker/1.0 (+https://recalls-rappels.canada.ca)'
+          'User-Agent': 'Canada-Recall-1Hour-Sync-Worker/1.0 (+https://recalls-rappels.canada.ca)'
         }
       });
       clearTimeout(timer);
@@ -155,7 +155,7 @@ export async function queryHealthCanadaFeed(options: FetchOptions = {}): Promise
         }
         if (Array.isArray(json) && json.length > 0) {
           rawData = json;
-          feedSource = fromCache ? 'server-cache-6h' : 'health-canada-live';
+          feedSource = fromCache ? 'server-cache-1h' : 'health-canada-live';
         }
       }
     }

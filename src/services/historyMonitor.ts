@@ -4,7 +4,8 @@ import { crossReferenceRecallDataset } from './gemini';
 import { syncLiveRecallsDatabase } from './recallData';
 import { recallStorage } from './storage';
 
-export const SIX_HOURS_MS = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
+export const ONE_HOUR_MS = 1 * 60 * 60 * 1000; // 1 hour in milliseconds
+export const SIX_HOURS_MS = ONE_HOUR_MS; // Alias for backward compatibility
 const LAST_DB_SYNC_KEY = 'canada_recall_db_last_sync_ts';
 const LAST_CHECK_KEY = 'canada_recall_history_last_check_ts';
 const NOTIFIED_RECORDS_KEY = 'canada_recall_history_notified_records_v2';
@@ -76,12 +77,12 @@ export function getLastHistoryCheckTime(): number | null {
 }
 
 /**
- * Get estimated timestamp of the next scheduled 6-hour check
+ * Get estimated timestamp of the next scheduled 1-hour check
  */
 export function getNextHistoryCheckTime(): number {
   const last = getLastDatabaseSyncTime() || getLastHistoryCheckTime();
   if (!last) return Date.now();
-  return last + SIX_HOURS_MS;
+  return last + ONE_HOUR_MS;
 }
 
 /**
@@ -551,7 +552,7 @@ export async function checkHistoryAgainstRecalls(
     }
   }
 
-  // Notify listeners that 6-hour check completed
+  // Notify listeners that 1-hour check completed
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent('recall-monitoring-check-completed', {
@@ -576,7 +577,7 @@ let activeSyncPromise: Promise<AppOpenSyncResult> | null = null;
 
 /**
  * UPDATES THE DATABASE OF RECALLS AND THEN CHECKS HISTORY AGAINST NEW RECALLS.
- * Only syncs from network once every 6 hours on app open (unless force=true).
+ * Only syncs from network once every 1 hour on app open (unless force=true).
  * Otherwise loads the cached dataset and verifies history instantly without network overhead.
  */
 export async function updateDatabaseAndCheckHistory(
@@ -590,14 +591,14 @@ export async function updateDatabaseAndCheckHistory(
   activeSyncPromise = (async () => {
     const now = Date.now();
     const lastSync = getLastDatabaseSyncTime();
-    const isDue = force || !lastSync || now - lastSync >= SIX_HOURS_MS;
+    const isDue = force || !lastSync || now - lastSync >= ONE_HOUR_MS;
 
-    // 1. If not due (< 6h) and we already have cached data in storage, skip downloading the 15.6MB feed!
+    // 1. If not due (< 1h) and we already have cached data in storage, skip downloading the 15.6MB feed!
     if (!isDue) {
       const cached = await recallStorage.getAllRecalls();
       if (cached && cached.length > 5000) {
         const minutesAgo = Math.round((now - (lastSync || now)) / (60 * 1000));
-        onProgress?.(`Database is up to date (synced ${minutesAgo}m ago, 6h interval). Verifying scan history...`);
+        onProgress?.(`Database is up to date (synced ${minutesAgo}m ago, 1h interval). Verifying scan history...`);
         const checkResult = await checkHistoryAgainstRecalls(cached, false);
         const meta = await recallStorage.getMetadata();
         return {
@@ -612,7 +613,7 @@ export async function updateDatabaseAndCheckHistory(
     }
 
     // 2. Otherwise (due or forced or no cache), sync the database from the live feed / bundled file
-    onProgress?.('Updating Canadian safety recall database (6-hour scheduled sync)...');
+    onProgress?.('Updating Canadian safety recall database (1-hour scheduled sync)...');
     const recallsRes = await syncLiveRecallsDatabase(onProgress);
 
     // Save timestamp of this network database sync
@@ -640,18 +641,18 @@ export async function updateDatabaseAndCheckHistory(
 
 /**
  * Initializes automatic database update and scan history verification when the app is resumed or refocused.
- * Enforces the 6-hour interval so network sync only occurs once every 6 hours.
+ * Enforces the 1-hour interval so network sync only occurs once every 1 hour.
  */
 export function initAppOpenHistoryMonitor(
   onRecallsUpdated?: (recalls: RecallItem[]) => void,
   onProgress?: (step: string) => void
 ): () => void {
-  // Check whenever user resumes or refocuses the app (with 6-hour throttle)
+  // Check whenever user resumes or refocuses the app (with 1-hour throttle)
   const handleResume = () => {
     if (document.visibilityState === 'visible') {
       const lastCheck = getLastDatabaseSyncTime() || getLastHistoryCheckTime();
       const now = Date.now();
-      if (!lastCheck || now - lastCheck >= SIX_HOURS_MS) {
+      if (!lastCheck || now - lastCheck >= ONE_HOUR_MS) {
         updateDatabaseAndCheckHistory(onProgress, false)
           .then((res) => {
             if (res.recallsCount > 0 && onRecallsUpdated) {

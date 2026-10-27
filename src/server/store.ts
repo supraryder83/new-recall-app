@@ -21,7 +21,7 @@ const DATA_DIR = path.resolve(process.cwd(), 'data');
 const STORE_FILE = path.join(DATA_DIR, 'pipeline-store.json');
 
 const INITIAL_WORKER_STATE: SyncWorkerState = {
-  cronExpression: '0 */6 * * *',
+  cronExpression: '0 * * * *',
   isRunning: false,
   lastRunAt: null,
   nextRunAt: null,
@@ -305,7 +305,7 @@ export class PipelineStore {
       ...this.data.workerState,
       isRunning: false,
       lastRunAt: summary.finishedAt,
-      nextRunAt: summary.finishedAt + 6 * 60 * 60 * 1000,
+      nextRunAt: summary.finishedAt + 1 * 60 * 60 * 1000,
       totalRuns: this.data.workerState.totalRuns + 1,
       lastSummary: summary
     };
