@@ -4,6 +4,7 @@ import type {
   SyncWorkerState,
   PipelineSyncSummary
 } from '../types/pipeline';
+import type { ScanHistoryItem } from '../types/recall';
 
 const DEFAULT_USER_ID = 'default_user';
 
@@ -298,6 +299,54 @@ export async function removeWatchlistItem(id: string): Promise<boolean> {
     console.warn('[PipelineClient] Error removing watchlist item:', err);
   }
   return false;
+}
+
+/**
+ * Automatically syncs the user's local scan history items to the backend watchlist
+ * so the server background worker continuously monitors them for recalls and dispatches Web Push notifications.
+ */
+export async function syncScanHistoryToBackendWatchlist(
+  historyItems: ScanHistoryItem[],
+  userId: string = DEFAULT_USER_ID
+): Promise<number> {
+  if (!historyItems || historyItems.length === 0) return 0;
+  try {
+    const existing = await fetchWatchlist(userId);
+    const existingUpcs = new Set(existing.map((e) => e.upcBarcode).filter(Boolean));
+    const existingTitles = new Set(existing.map((e) => (e.productName || '').toLowerCase().trim()));
+
+    let syncedCount = 0;
+    for (const item of historyItems) {
+      const upc = item.extractedInfo?.upcOrCode;
+      const title = item.identifiedTitle?.trim();
+      const brand = item.extractedInfo?.brand || '';
+      const model = item.extractedInfo?.modelOrLot || item.extractedInfo?.modelOrBatchNumber || '';
+
+      // Skip if already in watchlist
+      if (upc && existingUpcs.has(upc)) continue;
+      if (title && existingTitles.has(title.toLowerCase())) continue;
+
+      const added = await addWatchlistItem({
+        productName: title || 'Scanned Product',
+        brand,
+        modelNumber: model,
+        upcBarcode: upc,
+        keywords: item.searchKeywords ? item.searchKeywords.split(' ') : undefined,
+        notes: `Scanned on ${new Date(item.timestamp).toLocaleDateString()}`,
+        userId
+      });
+
+      if (added) {
+        syncedCount++;
+        if (upc) existingUpcs.add(upc);
+        if (title) existingTitles.add(title.toLowerCase());
+      }
+    }
+    return syncedCount;
+  } catch (err) {
+    console.warn('[PipelineClient] Failed to sync scan history to backend watchlist:', err);
+    return 0;
+  }
 }
 
 /**

@@ -31,6 +31,10 @@ import { BottomNavBar, type MobileTab } from './components/BottomNavBar';
 import { CategoriesView } from './components/CategoriesView';
 import { SettingsView } from './components/SettingsView';
 import { HistoryView } from './components/HistoryView';
+import { EmergencyRecallModal } from './components/EmergencyRecallModal';
+import { playRecallAlarmSound } from './services/alarmSound';
+import { syncScanHistoryToBackendWatchlist } from './services/pipelineClient';
+import { getScanHistory } from './services/scanHistory';
 
 const ITEMS_PER_PAGE = 30;
 
@@ -88,6 +92,12 @@ export const App: React.FC = () => {
   const [monitoringAlerts, setMonitoringAlerts] = useState<
     { historyItem: ScanHistoryItem; recall: RecallItem }[]
   >([]);
+
+  // Emergency Recall Alert Modal state (plays siren and displays recall info)
+  const [emergencyAlertItem, setEmergencyAlertItem] = useState<{
+    historyItem: ScanHistoryItem;
+    recall: RecallItem;
+  } | null>(null);
 
   // Group monitoring alerts by product line/variations so variations are grouped together
   const groupedAlertSummary = useMemo(() => {
@@ -185,6 +195,12 @@ export const App: React.FC = () => {
             });
           }
         }
+
+        // If newly recalled items detected on open, display recall info and sound alarm!
+        if (syncRes.newlyRecalledCount > 0 && syncRes.newlyRecalledItems.length > 0) {
+          setEmergencyAlertItem(syncRes.newlyRecalledItems[0]);
+          playRecallAlarmSound(15);
+        }
       }
     } catch (err: any) {
       console.warn('App open database update error:', err);
@@ -212,6 +228,24 @@ export const App: React.FC = () => {
   useEffect(() => {
     loadData(false);
 
+    // Sync local scan history to server background worker's watchlist so it monitors them for push notifications
+    const history = getScanHistory();
+    if (history.length > 0) {
+      syncScanHistoryToBackendWatchlist(history).catch(() => {});
+
+      // If user opens the app and has an active flagged recall in scan history, display info and sound alarm
+      const flagged = history.find(
+        (it) => it.verdict === 'MATCH_FOUND' && it.matchedRecalls && it.matchedRecalls.length > 0
+      );
+      if (flagged && flagged.matchedRecalls && flagged.matchedRecalls[0]) {
+        setEmergencyAlertItem({
+          historyItem: flagged,
+          recall: flagged.matchedRecalls[0]
+        });
+        playRecallAlarmSound(15);
+      }
+    }
+
     // Initialize resume / focus monitor so returning to app checks for new recalls
     const cleanupMonitor = initAppOpenHistoryMonitor((updatedRecalls) => {
       setAllRecalls(updatedRecalls);
@@ -228,6 +262,8 @@ export const App: React.FC = () => {
       const items = e.detail?.newlyRecalledItems;
       if (Array.isArray(items) && items.length > 0) {
         setMonitoringAlerts((prev) => [...items, ...prev]);
+        setEmergencyAlertItem(items[0]);
+        playRecallAlarmSound(15);
       }
     };
 
@@ -250,6 +286,7 @@ export const App: React.FC = () => {
           const found = allRecalls.find((r) => r.NID === recallNid);
           if (found) {
             setSelectedRecall(found);
+            playRecallAlarmSound(12);
           }
         }
       }
@@ -701,6 +738,18 @@ export const App: React.FC = () => {
           isOpen={Boolean(selectedRecall)}
           onClose={() => handleSelectRecall(null)}
         />
+
+        {/* EMERGENCY RECALL ALERT MODAL (Plays alarm siren & displays recall info on open) */}
+        {emergencyAlertItem && (
+          <EmergencyRecallModal
+            isOpen={Boolean(emergencyAlertItem)}
+            onClose={() => setEmergencyAlertItem(null)}
+            historyItem={emergencyAlertItem.historyItem}
+            recall={emergencyAlertItem.recall}
+            onNavigateToHistory={() => setCurrentTab('history')}
+            onViewFullRecallNotice={(recall) => handleSelectRecall(recall)}
+          />
+        )}
       </div>
     </div>
   );

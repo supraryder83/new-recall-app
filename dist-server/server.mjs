@@ -1597,7 +1597,7 @@ server.listen(PORT, HOST, () => {
   console.log(`[Server] Environment loaded from: ${fs5.existsSync(path7.resolve(__dirname5, "../.env")) ? path7.resolve(__dirname5, "../.env") : "current directory"}`);
   refreshRecallsFeed();
   try {
-    startSyncWorker({ runOnStartupIfDue: false });
+    startSyncWorker({ runOnStartupIfDue: true });
   } catch (err) {
     console.warn("[Server] Could not start sync worker:", err);
   }

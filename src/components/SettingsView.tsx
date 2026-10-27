@@ -10,8 +10,13 @@ import {
   Clock,
   Bell,
   BellRing,
-  Send
+  Send,
+  CheckCircle2,
+  AlertTriangle,
+  VolumeX,
+  ShieldAlert
 } from 'lucide-react';
+import { playRecallAlarmSound, stopRecallAlarmSound } from '../services/alarmSound';
 import { recallStorage } from '../services/storage';
 import { updateDatabaseAndCheckHistory } from '../services/historyMonitor';
 import type { DatasetSyncState } from '../types/recall';
@@ -46,12 +51,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isTriggeringSync, setIsTriggeringSync] = useState(false);
   const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [syncResultState, setSyncResultState] = useState<'idle' | 'all-clear' | 'recall-alert'>('idle');
+  const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
 
   useEffect(() => {
     fetchWorkerStatus().then((s) => {
       if (s) setWorkerStatus(s);
     });
     getWebPushSubscriptionStatus().then(setIsPushSubscribed);
+
+    const handleAlarmState = (e: any) => {
+      setIsAlarmPlaying(!!e.detail?.isPlaying);
+    };
+    window.addEventListener('recall-alarm-playing-changed', handleAlarmState);
+    return () => window.removeEventListener('recall-alarm-playing-changed', handleAlarmState);
   }, []);
 
   const handleTogglePush = async () => {
@@ -91,6 +104,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleTriggerManualSync = async () => {
     setIsTriggeringSync(true);
+    setSyncResultState('idle');
     setSyncFeedback('Updating recall database and verifying scan history...');
     try {
       // 1. Sync local recall database & verify against scan history (forced)
@@ -110,17 +124,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       // Success feedback
       const count = syncRes.recallsCount || 34287;
       if (syncRes.newlyRecalledCount > 0) {
+        setSyncResultState('recall-alert');
         setSyncFeedback(
-          `Database updated with ${count.toLocaleString()} notices. ⚠️ Found ${syncRes.newlyRecalledCount} product(s) matching your scan history!`
+          `🚨 URGENT RECALL DETECTED: Found ${syncRes.newlyRecalledCount} product(s) in your scan history matching active Canadian recalls!`
         );
+        // Sound emergency alarm siren immediately
+        playRecallAlarmSound(15);
       } else {
+        setSyncResultState('all-clear');
         setSyncFeedback(
-          `Database updated with ${count.toLocaleString()} Canadian notices. Verified against your scan history (${syncRes.checkedCount} items): All clear!`
+          `✅ All clear! Database updated with ${count.toLocaleString()} Canadian notices. Verified against your scan history (${syncRes.checkedCount} items): No recalls found.`
         );
       }
       onRefreshFeed();
     } catch {
-      setSyncFeedback('Database updated using offline records. Scan history verified.');
+      setSyncResultState('all-clear');
+      setSyncFeedback('Database verified using offline records. Scan history all clear.');
       onRefreshFeed();
     } finally {
       setIsTriggeringSync(false);
@@ -177,12 +196,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <button
             type="button"
+            id="settings-update-check-history-btn"
             onClick={handleTriggerManualSync}
             disabled={isTriggeringSync}
-            className="py-2 px-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-60 shrink-0"
+            className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-xs shrink-0 active:scale-95 ${
+              isTriggeringSync
+                ? 'bg-slate-400 text-white cursor-wait opacity-80'
+                : syncResultState === 'all-clear'
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400 shadow-md shadow-emerald-500/20'
+                : syncResultState === 'recall-alert'
+                ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse ring-4 ring-red-400 shadow-xl shadow-red-500/50'
+                : 'bg-red-600 hover:bg-red-700 text-white'
+            }`}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isTriggeringSync ? 'animate-spin' : ''}`} />
-            <span>{isTriggeringSync ? 'Updating...' : 'Update & Check History Now'}</span>
+            {isTriggeringSync ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Updating...</span>
+              </>
+            ) : syncResultState === 'all-clear' ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                <span>All Clear (0 Recalls)</span>
+              </>
+            ) : syncResultState === 'recall-alert' ? (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-white animate-bounce" />
+                <span>⚠️ Recall Detected!</span>
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Update & Check History Now</span>
+              </>
+            )}
           </button>
         </div>
 
@@ -211,8 +258,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {syncFeedback && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 font-medium">
-            {syncFeedback}
+          <div
+            className={`p-3.5 rounded-xl text-xs font-medium flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all ${
+              syncResultState === 'all-clear'
+                ? 'bg-emerald-50 border border-emerald-300 text-emerald-950 font-semibold'
+                : syncResultState === 'recall-alert'
+                ? 'bg-red-100 border-2 border-red-500 text-red-950 font-bold animate-pulse'
+                : 'bg-red-50 border border-red-200 text-red-900'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              {syncResultState === 'all-clear' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : syncResultState === 'recall-alert' ? (
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 animate-bounce" />
+              ) : null}
+              <span>{syncFeedback}</span>
+            </div>
+
+            {isAlarmPlaying && (
+              <button
+                type="button"
+                onClick={() => stopRecallAlarmSound()}
+                className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-xs shrink-0 self-start sm:self-center active:scale-95"
+              >
+                <VolumeX className="w-3.5 h-3.5" />
+                <span>Silence Alarm</span>
+              </button>
+            )}
           </div>
         )}
 

@@ -229,7 +229,7 @@ server.listen(PORT, HOST, () => {
 
   // Initialize background 6-hour sync worker
   try {
-    startSyncWorker({ runOnStartupIfDue: false });
+    startSyncWorker({ runOnStartupIfDue: true });
   } catch (err) {
     console.warn('[Server] Could not start sync worker:', err);
   }

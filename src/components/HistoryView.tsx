@@ -15,8 +15,11 @@ import {
   BellRing,
   RefreshCw,
   CheckCircle2,
-  Shield
+  Shield,
+  AlertTriangle,
+  VolumeX
 } from 'lucide-react';
+import { playRecallAlarmSound, stopRecallAlarmSound } from '../services/alarmSound';
 import type { RecallItem, ScanHistoryItem } from '../types/recall';
 import { getScanHistory } from '../services/scanHistory';
 import {
@@ -149,6 +152,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [lastCheckTime, setLastCheckTime] = useState<number | null>(null);
   const [isVerifyingNow, setIsVerifyingNow] = useState(false);
   const [verificationFeedback, setVerificationFeedback] = useState<string | null>(null);
+  const [verifyResultState, setVerifyResultState] = useState<'idle' | 'all-clear' | 'recall-alert'>('idle');
+  const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
   const [notificationsGranted, setNotificationsGranted] = useState(false);
 
   // Load history, check timestamps, notification records & permissions
@@ -166,10 +171,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     window.addEventListener('recall-monitoring-check-completed', handleUpdate);
     window.addEventListener('recall-notified-records-updated', handleUpdate);
 
+    const handleAlarmState = (e: any) => {
+      setIsAlarmPlaying(!!e.detail?.isPlaying);
+    };
+    window.addEventListener('recall-alarm-playing-changed', handleAlarmState);
+
     return () => {
       window.removeEventListener('scan-history-updated', handleUpdate);
       window.removeEventListener('recall-monitoring-check-completed', handleUpdate);
       window.removeEventListener('recall-notified-records-updated', handleUpdate);
+      window.removeEventListener('recall-alarm-playing-changed', handleAlarmState);
     };
   }, []);
 
@@ -188,6 +199,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   const handleVerifyNow = async () => {
     setIsVerifyingNow(true);
+    setVerifyResultState('idle');
     setVerificationFeedback('Updating Canadian recall database and checking history...');
     try {
       const result = await updateDatabaseAndCheckHistory((step) => {
@@ -198,12 +210,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       setNotifiedRecords(getNotifiedRecallRecords());
 
       if (result.newlyRecalledCount > 0) {
+        setVerifyResultState('recall-alert');
         setVerificationFeedback(
-          `⚠️ Safety check completed: ${result.newlyRecalledCount} product(s) in your history matched new Canadian recalls! Notification sent.`
+          `🚨 URGENT RECALL DETECTED: ${result.newlyRecalledCount} product(s) in your history matched new Canadian recalls!`
         );
+        playRecallAlarmSound(15);
       } else {
+        setVerifyResultState('all-clear');
         setVerificationFeedback(
-          `✅ Verification complete: Database updated with ${result.recallsCount.toLocaleString()} notices. All ${result.checkedCount} scanned products checked. No new recalls found.`
+          `✅ All clear! Database updated with ${result.recallsCount.toLocaleString()} notices. All ${result.checkedCount} scanned products checked. No new recalls found.`
         );
       }
     } catch (err: any) {
@@ -214,6 +229,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           const res = await checkHistoryAgainstRecalls(recallsDataset, true);
           setLastCheckTime(res.timestamp);
           setHistoryItems(getScanHistory());
+          setVerifyResultState('all-clear');
           setVerificationFeedback(
             `Checked against offline database: All ${res.checkedCount} products verified.`
           );
@@ -227,7 +243,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       setIsVerifyingNow(false);
       setTimeout(() => {
         setVerificationFeedback(null);
-      }, 7000);
+      }, 9000);
     }
   };
 
@@ -322,13 +338,41 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             {/* Manual Check Now Button */}
             <button
               type="button"
+              id="history-verify-now-btn"
               onClick={handleVerifyNow}
               disabled={isVerifyingNow || totalScans === 0}
-              className="flex-1 sm:flex-initial px-3.5 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all border border-white/20 flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap min-w-0"
+              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap min-w-0 ${
+                isVerifyingNow
+                  ? 'bg-slate-700/60 border-slate-600 text-slate-300 cursor-wait'
+                  : verifyResultState === 'all-clear'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400 ring-2 ring-emerald-400 shadow-md shadow-emerald-500/20'
+                  : verifyResultState === 'recall-alert'
+                  ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse border-red-500 ring-4 ring-red-400 shadow-lg shadow-red-500/40'
+                  : 'bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white border-white/20'
+              }`}
               title="Update recall database and check history now"
             >
-              <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isVerifyingNow ? 'animate-spin text-red-400' : ''}`} />
-              <span>{isVerifyingNow ? 'Updating & Checking...' : 'Check for New Recalls Now'}</span>
+              {isVerifyingNow ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-spin text-white" />
+                  <span>Updating & Checking...</span>
+                </>
+              ) : verifyResultState === 'all-clear' ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  <span>All Clear (0 Recalls)</span>
+                </>
+              ) : verifyResultState === 'recall-alert' ? (
+                <>
+                  <AlertTriangle className="w-3.5 h-3.5 text-white animate-bounce" />
+                  <span>⚠️ Recall Detected!</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                  <span>Check for New Recalls Now</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -404,8 +448,34 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
         {/* On-demand Feedback Banner */}
         {verificationFeedback && (
-          <div className="p-3 bg-white/10 border border-white/20 rounded-xl text-xs text-white animate-in fade-in break-words [overflow-wrap:anywhere]">
-            {verificationFeedback}
+          <div
+            className={`p-3 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-in fade-in break-words [overflow-wrap:anywhere] ${
+              verifyResultState === 'all-clear'
+                ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-200 font-semibold'
+                : verifyResultState === 'recall-alert'
+                ? 'bg-red-950/90 border-2 border-red-500 text-red-200 font-bold animate-pulse'
+                : 'bg-white/10 border border-white/20 text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              {verifyResultState === 'all-clear' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : verifyResultState === 'recall-alert' ? (
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 animate-bounce" />
+              ) : null}
+              <span>{verificationFeedback}</span>
+            </div>
+
+            {isAlarmPlaying && (
+              <button
+                type="button"
+                onClick={() => stopRecallAlarmSound()}
+                className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-xs shrink-0 self-start sm:self-center active:scale-95"
+              >
+                <VolumeX className="w-3.5 h-3.5" />
+                <span>Silence Alarm</span>
+              </button>
+            )}
           </div>
         )}
       </div>
