@@ -27,6 +27,21 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+/**
+ * Safely parses JSON and gives clear, readable error messages if the server returns HTML (e.g. 503 Service Unavailable)
+ */
+async function safeParseJson(res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (!res.ok) {
+      throw new Error(`Server returned HTTP ${res.status} (${res.statusText || 'Service Unavailable'}). Please ensure the Node.js application is running.`);
+    }
+    throw new Error('Invalid JSON response from server.');
+  }
+}
+
 export const DEFAULT_VAPID_PUBLIC_KEY =
   'BEWplbXClOE7-dY339tirCxloT6u_sdJfvBs0uvZQuOz4OM4ZC0uoKomdiOZOXqKEvzmaJIzMBcIxZQHbDzw3ws';
 
@@ -184,7 +199,7 @@ export async function sendTestWebPush(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId })
     });
-    const data = await res.json();
+    const data = await safeParseJson(res);
     if (res.ok) {
       return { success: true, message: data.message };
     }
@@ -201,7 +216,7 @@ export async function fetchWatchlist(userId: string = DEFAULT_USER_ID): Promise<
   try {
     const res = await fetch(`/api/watchlist?userId=${encodeURIComponent(userId)}`);
     if (res.ok) {
-      const data = await res.json();
+      const data = await safeParseJson(res);
       return Array.isArray(data.watchlist) ? data.watchlist : [];
     }
   } catch (err) {
@@ -231,7 +246,7 @@ export async function addWatchlistItem(
       })
     });
     if (res.ok) {
-      const data = await res.json();
+      const data = await safeParseJson(res);
       return data.item || null;
     }
   } catch (err) {
@@ -246,7 +261,7 @@ export async function removeWatchlistItem(id: string): Promise<boolean> {
       method: 'DELETE'
     });
     if (res.ok) {
-      const data = await res.json();
+      const data = await safeParseJson(res);
       return Boolean(data.success);
     }
   } catch (err) {
@@ -264,7 +279,7 @@ export async function fetchNotificationHistory(
   try {
     const res = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`);
     if (res.ok) {
-      const data = await res.json();
+      const data = await safeParseJson(res);
       return Array.isArray(data.notifications) ? data.notifications : [];
     }
   } catch (err) {
@@ -280,7 +295,7 @@ export async function fetchWorkerStatus(): Promise<WorkerStatusResponse | null> 
   try {
     const res = await fetch('/api/sync/status');
     if (res.ok) {
-      return await res.json();
+      return await safeParseJson(res);
     }
   } catch (err) {
     console.warn('[PipelineClient] Error fetching sync status:', err);
@@ -299,7 +314,7 @@ export async function triggerManualSync(options: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(options)
     });
-    const data = await res.json();
+    const data = await safeParseJson(res);
     if (res.ok) {
       return { success: true, summary: data.summary };
     }
