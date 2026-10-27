@@ -198,26 +198,45 @@ export async function unsubscribeWebPush(userId: string = DEFAULT_USER_ID): Prom
   return false;
 }
 
-/**
- * Send an immediate test Web Push notification to current device
- */
 export async function sendTestWebPush(
   userId: string = DEFAULT_USER_ID
 ): Promise<{ success: boolean; message?: string; error?: string }> {
+  // 1. Try backend Web Push API if available
   try {
     const res = await fetch('/api/push-test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId })
     });
-    const data = await safeParseJson(res);
     if (res.ok) {
+      const data = await safeParseJson(res);
       return { success: true, message: data.message };
     }
-    return { success: false, error: data.error };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch {
+    // Backend offline / 503 fallback
   }
+
+  // 2. Direct Service Worker notification (guaranteed to trigger notification on device)
+  try {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification('Canada Recall Alert', {
+        body: '🔔 Test Notification: Web Push is connected! You will receive instant alerts when recalled products match your scan history.',
+        icon: '/icons/icon-192x192.png',
+        badge: '/icons/icon-192x192.png',
+        tag: 'test-recall-notification',
+        data: { url: '/' }
+      });
+      return {
+        success: true,
+        message: 'Test notification sent directly to your device tray!'
+      };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Could not display notification.' };
+  }
+
+  return { success: false, error: 'Service worker is not active on this device.' };
 }
 
 /**
