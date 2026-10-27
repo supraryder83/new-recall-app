@@ -32,6 +32,7 @@ import { CategoriesView } from './components/CategoriesView';
 import { SettingsView } from './components/SettingsView';
 import { HistoryView } from './components/HistoryView';
 import { EmergencyRecallModal } from './components/EmergencyRecallModal';
+import { AppLoadingScreen } from './components/AppLoadingScreen';
 import { playRecallAlarmSound } from './services/alarmSound';
 import { syncScanHistoryToBackendWatchlist } from './services/pipelineClient';
 import { getScanHistory } from './services/scanHistory';
@@ -45,6 +46,11 @@ const ITEMS_PER_PAGE = 30;
 export const App: React.FC = () => {
   // Navigation tab state (Shared between mobile bottom nav & desktop sidebar)
   const [currentTab, setCurrentTab] = useState<MobileTab>('feed');
+
+  // Initial app loading screen state (lasts until recall database update and scan history check complete)
+  const [isInitialAppLoading, setIsInitialAppLoading] = useState(true);
+  const [appLoadingProgress, setAppLoadingProgress] = useState(15);
+  const [appLoadingStatus, setAppLoadingStatus] = useState('Connecting to Canadian safety database...');
 
   // Dataset state
   const [allRecalls, setAllRecalls] = useState<RecallItem[]>([]);
@@ -160,9 +166,31 @@ export const App: React.FC = () => {
   // Load Data & Update Database on App Open (only syncs once every 6 hours)
   const loadData = useCallback(async (forceRefresh = false) => {
     setSyncState((prev) => ({ ...prev, status: 'loading', errorMessage: undefined }));
+
+    const handleProgress = (step: string) => {
+      setLoadingProgress(step);
+      setAppLoadingStatus(step);
+      const lower = step.toLowerCase();
+      if (lower.includes('connect')) {
+        setAppLoadingProgress((prev) => Math.max(prev, 30));
+      } else if (lower.includes('fetch')) {
+        setAppLoadingProgress((prev) => Math.max(prev, 55));
+      } else if (lower.includes('parsing')) {
+        setAppLoadingProgress((prev) => Math.max(prev, 72));
+      } else if (lower.includes('updating database') || lower.includes('notices')) {
+        setAppLoadingProgress((prev) => Math.max(prev, 85));
+      } else if (lower.includes('history') || lower.includes('verifying')) {
+        setAppLoadingProgress((prev) => Math.max(prev, 93));
+      } else {
+        setAppLoadingProgress((prev) => Math.min(prev + 10, 95));
+      }
+    };
+
     try {
       if (forceRefresh) {
-        const syncRes = await updateDatabaseAndCheckHistory((step) => setLoadingProgress(step), true);
+        setAppLoadingProgress(25);
+        setAppLoadingStatus('Updating Canadian safety recall database...');
+        const syncRes = await updateDatabaseAndCheckHistory(handleProgress, true);
         const updated = await recallStorage.getAllRecalls();
         setAllRecalls(updated.length > 0 ? updated : []);
         setSyncState({
@@ -172,11 +200,15 @@ export const App: React.FC = () => {
           source: (syncRes.source as any) || 'live'
         });
       } else {
-        // Fast path: load cached data first so UI renders instantly
+        setAppLoadingProgress(20);
+        setAppLoadingStatus('Loading local safety cache...');
+        // Fast path: load cached data first so UI renders instantly behind splash
         const instant = await loadInstantCachedRecalls();
         const lastSync = getLastDatabaseSyncTime() || Date.now();
         if (instant && instant.data.length > 0) {
           setAllRecalls(instant.data);
+          setAppLoadingProgress(45);
+          setAppLoadingStatus('Checking database & scan history against recalls...');
           setSyncState({
             status: 'cached',
             lastSynced: lastSync,
@@ -186,7 +218,7 @@ export const App: React.FC = () => {
         }
 
         // Only syncs from network if 6 hours have passed since last sync (force = false)
-        const syncRes = await updateDatabaseAndCheckHistory((step) => setLoadingProgress(step), false);
+        const syncRes = await updateDatabaseAndCheckHistory(handleProgress, false);
         if (syncRes.recallsCount > 0) {
           const updated = await recallStorage.getAllRecalls();
           if (updated.length > 0) {
@@ -211,6 +243,12 @@ export const App: React.FC = () => {
           }
         }
       }
+
+      setAppLoadingProgress(100);
+      setAppLoadingStatus('Safety database updated & history verified');
+      setTimeout(() => {
+        setIsInitialAppLoading(false);
+      }, 400);
     } catch (err: any) {
       console.warn('App open database update error:', err);
       // Fallback: load any existing cached data
@@ -230,6 +268,11 @@ export const App: React.FC = () => {
           errorMessage: err?.message || 'Error downloading Canadian safety recalls.'
         }));
       }
+      setAppLoadingProgress(100);
+      setAppLoadingStatus('Ready');
+      setTimeout(() => {
+        setIsInitialAppLoading(false);
+      }, 350);
     }
   }, []);
 
@@ -771,6 +814,12 @@ export const App: React.FC = () => {
             onViewFullRecallNotice={(recall) => handleSelectRecall(recall)}
           />
         )}
+        {/* INITIAL APP LOADING SCREEN WITH CANADIAN RECALL LOGO & PROGRESS BAR */}
+        <AppLoadingScreen
+          isLoading={isInitialAppLoading}
+          progressPercent={appLoadingProgress}
+          statusText={appLoadingStatus}
+        />
       </div>
     </div>
   );

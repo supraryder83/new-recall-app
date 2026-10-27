@@ -33,6 +33,15 @@
   100% { transform: translateY(320px); }
 }
 
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.8s infinite;
+}
+
 .animate-scan {
   animation: scan-line 2.2s ease-in-out infinite alternate;
 }

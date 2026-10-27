@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/*.png'],
+      includeAssets: ['favicon.png', 'favicon.ico', 'apple-touch-icon.png', 'icons/*.png', 'icons/app-logo.png'],
       manifest: {
         name: 'Canada Recall Alert',
         short_name: 'RecallAlert',
